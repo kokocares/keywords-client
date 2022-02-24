@@ -10,14 +10,14 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use serde::Deserialize;
 use cache_control::CacheControl;
-use chrono::{Utc, DateTime};
+use chrono::Utc;
 
 const URL: &str = "api.kokocares.org/keywords";
 const CACHE_EXPIRATION_DEFAULT: i64 = 60;
 
 #[derive(Deserialize, Debug)]
 struct Keywords {
-    pub regexes: Vec<String>,
+    pub keywords: Vec<String>,
     pub preprocess: String,
 }
 
@@ -28,7 +28,7 @@ struct KeywordsCache {
 
 #[derive(Deserialize, Debug)]
 struct ApiResponse {
-    pub keywords: Keywords,
+    pub regex: Keywords,
 }
 
 struct KokoKeywords {
@@ -55,11 +55,11 @@ impl KokoKeywords {
         let cache_key = filter;
 
         if let Some(keyword_cache) = self.keywords.get(cache_key) {
-            if Utc::now().timestamp() > keyword_cache.expires_at  {
+            if Utc::now().timestamp() < keyword_cache.expires_at  {
                 let re = Regex::new(&keyword_cache.keywords.preprocess).unwrap();
                 let keyword = re.replace_all(keyword, "");
 
-                for re_keyword in &keyword_cache.keywords.regexes {
+                for re_keyword in &keyword_cache.keywords.keywords {
                     let re = Regex::new(re_keyword).unwrap();
                     if re.is_match(&keyword) {
                         return true;
@@ -77,27 +77,27 @@ impl KokoKeywords {
         }
     }
 
-    pub fn load_cache(&mut self, cache_key: &str) -> u8 {
-        println!("Loading regex for filter '{}'", cache_key);
+    pub fn load_cache(&mut self, filter: &str) -> u8 {
+        println!("Loading cache for filter '{}'", filter);
         let response = ureq::get(&self.url)
-            .query("filter", cache_key)
+            .query("filter", filter)
             .call()
             .expect("Can't fetch");
 
-        let expires_in = match CacheControl::from_value(response.header("cache-control").unwrap_or_default())  {
-            Some(cache_control) => match cache_control.max_age {
-                Some(max_age) => max_age.as_secs() as i64,
-                None => CACHE_EXPIRATION_DEFAULT,
-            },
-            None => CACHE_EXPIRATION_DEFAULT,
-        };
+        let expires_in = response.header("cache-control")
+            .map(CacheControl::from_value)
+            .flatten()
+            .map(|cc| cc.max_age)
+            .flatten()
+            .map(|max_age| max_age.as_secs() as i64)
+            .unwrap_or(CACHE_EXPIRATION_DEFAULT);
 
         let api_response: ApiResponse = serde_json::from_reader(response.into_reader()).expect("Can't parse");
         let keywords_cache = KeywordsCache {
-            keywords: api_response.keywords,
+            keywords: api_response.regex,
             expires_at: Utc::now().timestamp() + expires_in,
         };
-        self.keywords.insert(cache_key.to_string(), keywords_cache);
+        self.keywords.insert(filter.to_string(), keywords_cache);
         0
     }
 }
