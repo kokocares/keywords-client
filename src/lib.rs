@@ -1,5 +1,7 @@
 // TODO: 
 // - Expire cache using cache headers or default
+// - Error handling
+// - Passing version
 
 //use std::ffi::c_void
 use std::{ffi::CStr, sync::Mutex, env, collections::HashMap};
@@ -11,23 +13,23 @@ use regex::Regex;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
-struct RegexResponse {
+struct Keywords {
     pub keywords: Vec<String>,
     pub preprocess: String,
 }
 
 #[derive(Deserialize, Debug)]
-struct Response {
+struct ApiResponse {
     pub version: String,
-    pub regex: RegexResponse,
+    pub regex: Keywords,
 }
 
-struct KeywordMatcher {
-    pub regexes: HashMap<String, RegexResponse>,
+struct KokoKeywords {
+    pub keywords: HashMap<String, Keywords>,
     pub url: String,
 }
 
-impl KeywordMatcher {
+impl KokoKeywords {
     pub fn new() -> Self {
         let url = match (env::var("URL").ok(), env::var("AUTH").ok()) {
             (Some(_), Some(_)) => panic!("AUTH and URL are mutually exclusive. Put the auth in the URL itself"),
@@ -37,14 +39,13 @@ impl KeywordMatcher {
         };
         
         Self {
-            regexes: HashMap::new(),
+            keywords: HashMap::new(),
             url
         }
     }
 
-    pub fn match_keyword(&mut self, keyword: &str, filter: &str) -> bool {
-
-        if let Some(regex) = self.regexes.get(filter) {
+    pub fn verify(&mut self, keyword: &str, filter: &str) -> bool {
+        if let Some(regex) = self.keywords.get(filter) {
             println!("Maching on '{}' with filter '{}'", keyword, filter);
 
             let re = Regex::new(&regex.preprocess).unwrap();
@@ -65,10 +66,10 @@ impl KeywordMatcher {
                 .call()
                 .expect("Can't fetch");
 
-            let r: Response = serde_json::from_reader(r.into_reader()).expect("Can't parse");
-            self.regexes.insert(filter.to_string(), r.regex);
+            let r: ApiResponse = serde_json::from_reader(r.into_reader()).expect("Can't parse");
+            self.keywords.insert(filter.to_string(), r.regex);
 
-            self.match_keyword(keyword, filter)
+            self.verify(keyword, filter)
         }
     }
 }
@@ -90,12 +91,12 @@ impl KeywordMatcher {
 // }
 
 lazy_static! {
-    static ref MATCHER: Mutex<KeywordMatcher> =
-        Mutex::new(KeywordMatcher::new());
+    static ref MATCHER: Mutex<KokoKeywords> =
+        Mutex::new(KokoKeywords::new());
 }
 
 #[no_mangle]
-pub extern "C" fn match_keywords(input: *const i8, filter: *const i8) -> bool {
+pub extern "C" fn koko_keywords_match(input: *const i8, filter: *const i8) -> bool {
     let input = unsafe { CStr::from_ptr(input) };
     let input = input.to_str().expect("UTF8 string expected");
     let filter = unsafe { CStr::from_ptr(filter) };
@@ -103,5 +104,5 @@ pub extern "C" fn match_keywords(input: *const i8, filter: *const i8) -> bool {
 
     println!("We are called with: '{}', '{}'", input, filter);
 
-    MATCHER.lock().unwrap().match_keyword(&input, &filter)
+    MATCHER.lock().unwrap().verify(&input, &filter)
 }
