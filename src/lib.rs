@@ -1,7 +1,6 @@
 // TODO: 
-// - Expire cache using cache headers or default
-// - Error handling
 // - Passing version
+// - Error handling
 // - Config for setting auth and url instead of using env vars
 // - Packaging up python lib
 // - CI/CD
@@ -54,10 +53,10 @@ impl KokoKeywords {
         }
     }
 
-    pub fn verify(&mut self, keyword: &str, filter: &str) -> bool {
-        let cache_key = filter;
+    pub fn verify(&mut self, keyword: &str, filter: &str, version: Option<&str>) -> bool {
+        let cache_key = format!("{}{}", filter, version.unwrap_or_default());
 
-        if let Some(keyword_cache) = self.keywords.get(cache_key) {
+        if let Some(keyword_cache) = self.keywords.get(&cache_key) {
             if Utc::now().timestamp() < keyword_cache.expires_at  {
                 let re = Regex::new(&keyword_cache.keywords.preprocess).unwrap();
                 let keyword = re.replace_all(keyword, "");
@@ -71,21 +70,30 @@ impl KokoKeywords {
 
                 return false
             } else {
-                self.load_cache(cache_key);
-                self.verify(keyword, filter)
+                self.load_cache(filter, version);
+                self.verify(keyword, filter, version)
             }
         } else {
-            self.load_cache(cache_key);
-            self.verify(keyword, filter)
+            self.load_cache(filter, version);
+            self.verify(keyword, filter, version)
         }
     }
 
-    pub fn load_cache(&mut self, filter: &str) -> u8 {
-        println!("Loading cache for filter '{}'", filter);
-        let response = ureq::get(&self.url)
-            .query("filter", filter)
-            .call()
-            .expect("Can't fetch");
+    pub fn load_cache(&mut self, filter: &str, version: Option<&str>) {
+        let cache_key = format!("{}{}", filter, version.unwrap_or_default());
+
+        println!("Loading cache for key '{}'", cache_key);
+
+        let request = ureq::get(&self.url);
+
+        let request = request.query("filter", filter);
+        let request = if let Some(version) = version {
+            request.query("version", version)
+        } else {
+            request
+        };
+
+        let response = request.call().expect("Can't fetch");
 
         let expires_in = response.header("cache-control")
             .map(CacheControl::from_value)
@@ -100,8 +108,7 @@ impl KokoKeywords {
             keywords: api_response.regex,
             expires_at: Utc::now().timestamp() + expires_in,
         };
-        self.keywords.insert(filter.to_string(), keywords_cache);
-        0
+        self.keywords.insert(cache_key.to_string(), keywords_cache);
     }
 }
 
@@ -127,13 +134,23 @@ lazy_static! {
 }
 
 #[no_mangle]
-pub extern "C" fn koko_keywords_match(input: *const i8, filter: *const i8) -> bool {
-    let input = unsafe { CStr::from_ptr(input) };
-    let input = input.to_str().expect("UTF8 string expected");
-    let filter = unsafe { CStr::from_ptr(filter) };
-    let filter = filter.to_str().expect("UTF8 string expected");
+pub extern "C" fn koko_keywords_match(input: *const i8, filter: *const i8, version: *const i8,) -> bool {
+    let input = str_from_c(input).expect("Input is required");
+    let filter = str_from_c(filter).expect("Filter is required");
+    let version = str_from_c(version);
 
-    println!("We are called with: '{}', '{}'", input, filter);
+    println!("Calling with {:?}, {:?}, {:?}", input, filter, version);
 
-    MATCHER.lock().unwrap().verify(input, filter)
+    MATCHER.lock().unwrap().verify(input, filter, version)
+}
+
+pub fn str_from_c<'a>(c_str: *const i8) -> Option<&'a str> {
+    if c_str.is_null() {
+        None
+    } else {
+        Some(
+            unsafe { CStr::from_ptr(c_str) }
+                .to_str().expect("Malformed UTF-8 string")
+        )
+    }
 }
