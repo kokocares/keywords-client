@@ -104,5 +104,5 @@ pub extern "C" fn koko_keywords_match(input: *const i8, filter: *const i8) -> bo
 
     println!("We are called with: '{}', '{}'", input, filter);
 
-    MATCHER.lock().unwrap().verify(&input, &filter)
+    MATCHER.lock().unwrap().verify(input, filter)
 }
