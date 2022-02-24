@@ -3,8 +3,11 @@
 // - Error handling
 // - Passing version
 // - Config for setting auth and url instead of using env vars
+// - Packaging up python lib
+// - CI/CD
+// - Tests
+// - Documentation
 
-//use std::ffi::c_void
 use std::{ffi::CStr, sync::Mutex, env, collections::HashMap};
 use lazy_static::lazy_static;
 use regex::Regex;
