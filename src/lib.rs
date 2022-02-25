@@ -21,11 +21,9 @@ type KokoResult<T> = Result<T, KokoError>;
 
 #[derive(Debug, Clone, Copy)]
 pub enum KokoError {
-    Padding,
-    AuthOrUrlMissing,
-    CacheRefreshRequestFailure,
-    CacheResultParseFailure,
-    ParseError,
+    AuthOrUrlMissing=-1,
+    CacheRefreshError=-2,
+    ParseError=-3,
 }
 
 #[derive(Deserialize, Debug)]
@@ -94,7 +92,7 @@ impl KokoKeywords {
             request
         };
 
-        let response = request.call().map_err(|_| KokoError::ParseError)?;
+        let response = request.call().map_err(|_| KokoError::CacheRefreshError)?;
 
         let expires_in = response.header("cache-control")
             .map(CacheControl::from_value)
@@ -162,7 +160,7 @@ pub extern "C" fn koko_keywords_match(input: *const i8, filter: *const i8, versi
     println!("Result: {:?}", result);
     match result {
         Ok(r) => if r { 1 } else { 0 }
-        Err(e) => -(e as isize),
+        Err(e) => e as isize,
     }
 }
 
