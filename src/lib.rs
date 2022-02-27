@@ -149,7 +149,7 @@ fn koko_keywords_match_inner(input: &str, filter: &str, version: Option<&str>) -
 }
 
 #[no_mangle]
-pub extern "C" fn koko_keywords_match(input: *const i8, filter: *const i8, version: *const i8,) -> isize {
+pub extern "C" fn koko_keywords_match(input: *const libc::c_char, filter: *const libc::c_char, version: *const libc::c_char) -> isize {
     let input = str_from_c(input).expect("Input is required");
     let filter = str_from_c(filter).expect("Filter is required");
     let version = str_from_c(version);
@@ -164,7 +164,7 @@ pub extern "C" fn koko_keywords_match(input: *const i8, filter: *const i8, versi
     }
 }
 
-pub fn str_from_c<'a>(c_str: *const i8) -> Option<&'a str> {
+pub fn str_from_c<'a>(c_str: *const libc::c_char) -> Option<&'a str> {
     if c_str.is_null() {
         None
     } else {
