@@ -27,6 +27,10 @@ def find_and_load_dylib():
 
 lib = find_and_load_dylib()
 
+def match(text, filters="", version=None):
+  version = version or ffi.NULL
+  lib.koko_keywords_match(text.encode(), filters.encode(), version)
+
 def main():
   r = lib.koko_keywords_match("sewerslide".encode(), "".encode(), ffi.NULL)
   print(r)
@@ -38,10 +42,6 @@ def main():
   print(r)
   r = lib.koko_keywords_match("it's all good".encode(), "".encode(), ffi.NULL)
   print(r)
-
-def match(text, filters="", version=None):
-  version = version or ffi.NULL
-  lib.koko_keywords_match(text.encode(), filters.encode(), version)
 
 if __name__ == "__main__":
   main()
