@@ -1,2 +1,4 @@
-include koko_keywords/libkoko_x86_64.so
+include koko_keywords/libkoko_x86_64.dylib
 include koko_keywords/libkoko_arm64.dylib
+include koko_keywords/libkoko_x86_64.so
+include koko_keywords/libkoko_arm64.so

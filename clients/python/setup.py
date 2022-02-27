@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name='koko-keywords',
+    name='koko_keywords',
     version='0.0.1',
     author='Kareem Kouddous',
     license='MIT',
