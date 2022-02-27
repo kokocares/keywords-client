@@ -1,0 +1,8 @@
+MANIFEST.in
+README.md
+setup.py
+koko_keywords.egg-info/PKG-INFO
+koko_keywords.egg-info/SOURCES.txt
+koko_keywords.egg-info/dependency_links.txt
+koko_keywords.egg-info/requires.txt
+koko_keywords.egg-info/top_level.txt
