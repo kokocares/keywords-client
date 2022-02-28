@@ -4,7 +4,7 @@ name: Compile for all targets
 
 jobs:
   linux_build:
-    name: Build
+    name: Linux Build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -24,8 +24,12 @@ jobs:
           use-cross: true
           command: build
           args: --release --target=${{ matrix.target }}
+      - uses: actions/upload-artifact@v2
+        with:
+          name: lib
+          path: target/**/*.so
   darwin_build:
-    name: Build
+    name: Darwin Build
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -45,3 +49,7 @@ jobs:
           use-cross: true
           command: build
           args: --release --target=${{ matrix.target }}
+      - uses: actions/upload-artifact@v2
+        with:
+          name: lib
+          path: target/**/*.so
