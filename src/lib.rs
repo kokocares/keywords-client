@@ -1,11 +1,8 @@
 // TODO: 
-// - Packaging up python lib
 // - Logging
 // - CI/CD
 // - Tests
-// - Documentation
 // - RELEASE
-// - Config for setting auth and url instead of using env vars
 
 use std::{ffi::CStr, sync::Mutex, env, collections::HashMap, time::SystemTime};
 use lazy_static::lazy_static;
@@ -13,6 +10,7 @@ use regex::Regex;
 use serde::Deserialize;
 use cache_control::CacheControl;
 use std::time::Duration;
+use ureq::Error;
 
 const URL: &str = "api.kokocares.org/keywords";
 const CACHE_EXPIRATION_DEFAULT: Duration = Duration::from_secs(3600);
@@ -22,8 +20,9 @@ type KokoResult<T> = Result<T, KokoError>;
 #[derive(Debug, Clone, Copy)]
 pub enum KokoError {
     AuthOrUrlMissing=-1,
-    CacheRefreshError=-2,
-    ParseError=-3,
+    InvalidCredentials=-2,
+    CacheRefreshError=-3,
+    ParseError=-4,
 }
 
 #[derive(Deserialize, Debug)]
@@ -81,7 +80,7 @@ impl KokoKeywords {
     pub fn load_cache(&mut self, filter: &str, version: Option<&str>) -> KokoResult<()> {
         let cache_key = format!("{}{}", filter, version.unwrap_or_default());
 
-        println!("Loading cache for key '{}'", cache_key);
+        eprintln!("[koko-keywords] Loading cache for '{}'", cache_key);
 
         let request = ureq::get(&self.url);
 
@@ -92,7 +91,11 @@ impl KokoKeywords {
             request
         };
 
-        let response = request.call().map_err(|_| KokoError::CacheRefreshError)?;
+        let response = match request.call() {
+            Ok(response) => { Ok(response) },
+            Err(Error::Status(403, _)) => { Err(KokoError::InvalidCredentials) }
+            Err(_) => { Err(KokoError::CacheRefreshError) }
+        }?;
 
         let expires_in = response.header("cache-control")
             .map(CacheControl::from_value)
@@ -138,10 +141,7 @@ pub extern "C" fn koko_keywords_match(input: *const libc::c_char, filter: *const
     let filter = str_from_c(filter).expect("Filter is required");
     let version = str_from_c(version);
 
-    println!("Calling with {:?}, {:?}, {:?}", input, filter, version);
-
     let result = koko_keywords_match_inner(input, filter, version);
-    println!("Result: {:?}", result);
     match result {
         Ok(r) => if r { 1 } else { 0 }
         Err(e) => e as isize,

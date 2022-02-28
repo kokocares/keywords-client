@@ -55,6 +55,12 @@ koko_keywords.match("sewerslide", version="20220206")
 The underlying library is written in Rust and cross-compiled to the four major CPU targets. Regexes are cached based on the cache expiration headers (currently set to an hour). This ensures very low latency and overhead (~10ms/req).
 
 
+## Error Handling
+A RuntimeError will be raised with hints on how to resolve the issue. No exception handling should be necessary.
+
+## Logging
+Minimal log messages are logged to STDERR
+
 ## License
 
 ```
@@ -72,7 +78,7 @@ WWWWWW||WWWWWW
 
 (The MIT License)
 
-Copyright (c) 2017 Koko Inc. <us@itskoko.com>
+Copyright (c) 2017 Koko AI Inc. <us@kokocares.org>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the 'Software'), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
