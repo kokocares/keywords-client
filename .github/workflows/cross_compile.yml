@@ -1,4 +1,4 @@
-on: [push, request]
+on: [push, pullrequest]
 
 name: Compile for all targets
 
