@@ -112,22 +112,6 @@ impl KokoKeywords {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-
-//     #[test]
-//     fn test_match_keyword() {
-//         let x = KeywordMatcher { regex: RegexResponse {
-//             keywords: vec!["blah".to_string()],
-//             preprocess: "yes".to_string(),
-//         }};
-
-//         //assert!(x.match_keyword("yadiyada"));
-//         assert!(!x.match_keyword("yadiyqweqweada"));
-//     }
-// }
-
 lazy_static! {
     static ref MATCHER: Mutex<KokoResult<KokoKeywords>> =
         Mutex::new(get_url().map(KokoKeywords::new));
