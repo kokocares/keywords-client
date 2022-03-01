@@ -52,4 +52,4 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: lib
-          path: target/**/*.so
+          path: target/**/*.dylib
