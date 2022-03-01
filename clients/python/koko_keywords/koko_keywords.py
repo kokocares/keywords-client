@@ -46,4 +46,4 @@ def match(text, filters="", version=None):
   elif match_value == -4:
       raise RuntimeError("Unable to parse response from API. Please contact us at api.kokocares.org if this issue persists.")
 
-  return match_value
+  return bool(match_value)
