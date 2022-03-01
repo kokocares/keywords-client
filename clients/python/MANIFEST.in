@@ -1,0 +1,3 @@
+recursive-include koko_keywords/lib/ *.so
+recursive-include koko_keywords/lib/ *.dylib
+exclude koko_keywords/test.py
