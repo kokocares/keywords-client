@@ -1,9 +1,7 @@
 Koko Keyword Client
 ============
 
-A multi platform, native client with bindings (soon) to all major languages for
-the [Koko Keywords
-API](https://r.kokocares.org/koko_keywords/docs). The client handles caching to ensure very low latency.
+A python client  for the [Koko Keywords API](https://r.kokocares.org/koko_keywords/docs). The client handles caching to ensure very low latency.
 
 ## Install
 
