@@ -4,7 +4,7 @@ setup(
     name='koko_keywords',
     version='0.0.2',
     author='Kareem Kouddous',
-    author_email='kareemk@kokocares.org',
+    author_email='api@kokocares.org',
     description="A python client  for the [Koko Keywords API](https://r.kokocares.org/koko_keywords/docs). The client handles caching to ensure very low latency.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

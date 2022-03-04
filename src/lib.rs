@@ -1,9 +1,9 @@
 use cache_control::CacheControl;
+use std::{ffi::CStr, sync::Mutex, env, collections::HashMap, time::SystemTime};
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::Deserialize;
 use std::time::Duration;
-use std::{collections::HashMap, env, ffi::CStr, sync::Mutex, time::SystemTime};
 use ureq::{Error, ErrorKind};
 
 const URL: &str = "api.kokocares.org/keywords";
@@ -82,6 +82,8 @@ impl KokoKeywords {
 
     pub fn load_cache(&mut self, filter: &str, version: Option<&str>) -> KokoResult<()> {
         let cache_key = format!("{}_{}", filter, version.unwrap_or("latest"));
+
+        eprintln!("[koko-keywords] Loading cache for '{}'", cache_key);
 
         let request = ureq::get(&self.url);
 
@@ -176,6 +178,7 @@ pub extern "C" fn c_koko_keywords_match(
     let input = str_from_c(input).expect("Input is required");
     let filter = str_from_c(filter).expect("Filter is required");
     let version = str_from_c(version);
+
 
     let result = koko_keywords_match(input, filter, version);
     match result {
