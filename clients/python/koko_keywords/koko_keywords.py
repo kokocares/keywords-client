@@ -7,7 +7,7 @@ def find_and_load_dylib():
   current_dir = os.path.dirname(os.path.abspath(__file__))
 
   ffi.cdef("""
-  int koko_keywords_match(const char *input, const char *filter, const char *version);
+  int c_koko_keywords_match(const char *input, const char *filter, const char *version);
   """)
 
   filname = None
@@ -35,10 +35,10 @@ def match(text, filters="", version=None):
   if version:
     version = version.encode()
 
-  match_value = lib.koko_keywords_match(text.encode(), filters.encode(), ffi.NULL)
+  match_value = lib.c_koko_keywords_match(text.encode(), filters.encode(), ffi.NULL)
 
   if match_value == -1:
-    raise RuntimeError("KOKO_KEYWORDS_AUTH or KOKO_KEYWORDS_URL must be set");
+    raise RuntimeError("KOKO_KEYWORDS_AUTH must be set before importing the library")
   elif match_value == -2:
       raise RuntimeError("Invalid credentials. Please confirm you are using valid credentials, contact us at api.kokocares.org if you need assistance.")
   elif match_value == -3:
@@ -46,4 +46,4 @@ def match(text, filters="", version=None):
   elif match_value == -4:
       raise RuntimeError("Unable to parse response from API. Please contact us at api.kokocares.org if this issue persists.")
 
-  return match_value
+  return bool(match_value)

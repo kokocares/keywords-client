@@ -165,8 +165,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "koko"
-version = "0.1.0"
+name = "koko_keywords"
+version = "0.0.1"
 dependencies = [
  "cache_control",
  "lazy_static",
