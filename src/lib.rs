@@ -1,9 +1,3 @@
-// TODO:
-// - Logging
-// - CI/CD
-// - Tests
-// - RELEASE
-
 use cache_control::CacheControl;
 use lazy_static::lazy_static;
 use regex::Regex;
