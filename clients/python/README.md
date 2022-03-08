@@ -51,7 +51,7 @@ koko_keywords.match("sewerslide", version="20220206")
 ```
 
 ## Performance
-The underlying library is written in Rust and cross-compiled to the four major CPU targets. Regexes are cached based on the cache expiration headers (currently set to an hour). This ensures very low latency and overhead (~10ms/req).
+The underlying library is written in Rust and cross-compiled to the four major CPU targets. Regexes are cached based on the cache expiration headers (currently set to an hour). This ensures very low latency and overhead (< 1μs/req).
 
 
 ## Error Handling
