@@ -5,10 +5,10 @@ setup(
     version='0.0.2',
     author='Kareem Kouddous',
     author_email='api@kokocares.org',
-    description="A python client  for the [Koko Keywords API](https://r.kokocares.org/koko_keywords/docs). The client handles caching to ensure very low latency.",
+    description="A python client  for the Koko Keywords API. The client handles caching to ensure very low latency.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/kokocares/keywords-client",
+    url="https://github.com/kokocares/keywords-client/python/client",
     license='MIT',
     classifiers=[
       'Development Status :: 4 - Beta',
@@ -22,8 +22,8 @@ setup(
       'Programming Language :: Python :: 3.9',
     ],
     project_urls={
-      'Documentation': 'https://github.com/kokocares/keywords-client',
-      'Source': 'https://github.com/kokocares/keywords-client',
+      'Documentation': 'https://github.com/kokocares/keywords-client/python/client',
+      'Source': 'https://github.com/kokocares/keywords-client/python/client',
       'Tracker': 'https://github.com/kokocares/keywords-client/issues',
     },
     py_modules=['koko_keywords'],
