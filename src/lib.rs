@@ -1,13 +1,46 @@
 use cache_control::CacheControl;
-use std::{ffi::CStr, sync::Mutex, env, collections::HashMap, time::SystemTime};
+use std::{ffi::CStr, sync::Mutex, env, collections::HashMap, time::SystemTime, ops, fmt};
 use lazy_static::lazy_static;
-use regex::Regex;
 use serde::Deserialize;
 use std::time::Duration;
 use ureq::{Error, ErrorKind};
 
 const URL: &str = "api.kokocares.org/keywords";
 const CACHE_EXPIRATION_DEFAULT: Duration = Duration::from_secs(3600);
+
+#[derive(Clone, Debug)]
+pub struct Regex(regex::Regex);
+
+impl ops::Deref for Regex {
+    type Target = regex::Regex;
+    fn deref(&self) -> &regex::Regex { &self.0 }
+}
+
+impl<'de> serde::Deserialize<'de> for Regex {
+    fn deserialize<D>(de: D) -> Result<Regex, D::Error>
+    where D: serde::Deserializer<'de>
+    {
+        use serde::de::{Error, Visitor};
+
+        struct RegexVisitor;
+
+        impl<'de> Visitor<'de> for RegexVisitor {
+            type Value = Regex;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a regular expression pattern")
+            }
+
+            fn visit_str<E: Error>(self, v: &str) -> Result<Regex, E> {
+                regex::Regex::new(v).map(Regex).map_err(|err| {
+                    E::custom(err.to_string())
+                })
+            }
+        }
+
+        de.deserialize_str(RegexVisitor)
+    }
+}
 
 type KokoResult<T> = Result<T, KokoError>;
 
@@ -22,8 +55,8 @@ pub enum KokoError {
 
 #[derive(Deserialize, Debug)]
 struct Keywords {
-    pub keywords: Vec<String>,
-    pub preprocess: String,
+    pub keywords: Vec<Regex>,
+    pub preprocess: Regex,
 }
 
 struct KeywordsCache {
@@ -59,12 +92,10 @@ impl KokoKeywords {
 
         if let Some(keyword_cache) = self.keywords.get(&cache_key) {
             if SystemTime::now() < keyword_cache.expires_at {
-                let re = Regex::new(&keyword_cache.keywords.preprocess).unwrap();
-                let keyword = re.replace_all(keyword, "");
+                let keyword = keyword_cache.keywords.preprocess.replace_all(keyword, "");
 
                 for re_keyword in &keyword_cache.keywords.keywords {
-                    let re = Regex::new(re_keyword).unwrap();
-                    if re.is_match(&keyword) {
+                    if re_keyword.is_match(&keyword) {
                         return Ok(true);
                     }
                 }
@@ -225,14 +256,13 @@ mod test {
 
     #[test]
     fn test_unexpired_cache() {
+        let api_response: ApiResponse =
+            serde_json::from_str("{ \"regex\": {\"keywords\": [\"^badword$\"], \"preprocess\": \" \"} }").unwrap();
         let mut x = KokoKeywords {
             keywords: HashMap::from([(
                 "_latest".to_string(),
                 KeywordsCache {
-                    keywords: Keywords {
-                        keywords: vec!["^badword$".to_string()],
-                        preprocess: " ".to_string(),
-                    },
+                    keywords: api_response.regex,
                     expires_at: SystemTime::now() + Duration::new(1000, 0),
                 },
             )]),
