@@ -22,8 +22,8 @@ setup(
       'Programming Language :: Python :: 3.9',
     ],
     project_urls={
-      'Documentation': 'https://github.com/kokocares/keywords-client/python/client',
-      'Source': 'https://github.com/kokocares/keywords-client/python/client',
+      'Documentation': 'https://github.com/kokocares/keywords-client/tree/main/clients/python',
+      'Source': 'https://github.com/kokocares/keywords-client/tree/main/clients/python',
       'Tracker': 'https://github.com/kokocares/keywords-client/issues',
     },
     py_modules=['koko_keywords'],
