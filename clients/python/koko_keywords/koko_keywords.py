@@ -45,5 +45,7 @@ def match(text, filters="", version=None):
       raise RuntimeError("Unable to refresh cache. Please try again or contact us at api.kokocares.org if this issue persists.")
   elif match_value == -4:
       raise RuntimeError("Unable to parse response from API. Please contact us at api.kokocares.org if this issue persists.")
+  elif match_value == -5:
+      raise RuntimeError("Invalid url. Please ensure the url used is valid.")
 
   return bool(match_value)
