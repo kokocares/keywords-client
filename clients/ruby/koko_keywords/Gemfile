@@ -1,0 +1,6 @@
+source "https://rubygems.org"
+
+git_source(:github) {|repo_name| "https://github.com/kokocares/koko-keywords" }
+
+# Specify your gem's dependencies in koko_keywords.gemspec
+gemspec
