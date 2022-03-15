@@ -34,8 +34,11 @@ lib = find_and_load_dylib()
 def match(text, filters="", version=None):
   if version:
     version = version.encode()
+  else:
+    version = ffi.NULL
 
-  match_value = lib.c_koko_keywords_match(text.encode(), filters.encode(), ffi.NULL)
+
+  match_value = lib.c_koko_keywords_match(text.encode(), filters.encode(), version)
 
   if match_value == -1:
     raise RuntimeError("KOKO_KEYWORDS_AUTH must be set before importing the library")
