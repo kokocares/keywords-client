@@ -25,7 +25,7 @@ def find_and_load_dylib():
   else:
     raise LookupError(f'Unsupported platform {uname.sysname}, {uname.machine} contact api@kokocares.org for support')
 
-  return ffi.dlopen(current_dir + '/lib/' + filename)
+  return ffi.dlopen(current_dir + '/clib/' + filename)
 
 lib = find_and_load_dylib()
 
