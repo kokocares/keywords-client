@@ -92,7 +92,7 @@ impl KokoKeywords {
 
         if let Some(keyword_cache) = self.keywords.get(&cache_key) {
             if SystemTime::now() < keyword_cache.expires_at {
-                let keyword = keyword_cache.keywords.preprocess.replace_all(keyword, "");
+                let keyword = keyword_cache.keywords.preprocess.replace_all(keyword, "").to_lowercase();
 
                 for re_keyword in &keyword_cache.keywords.keywords {
                     if re_keyword.is_match(&keyword) {
@@ -136,7 +136,7 @@ impl KokoKeywords {
             },
             Err(Error::Status(403, _)) => Err(KokoError::InvalidCredentials),
             Err(response) => {
-                println!("{:?}", response);
+                eprintln!("{:?}", response);
                 Err(KokoError::CacheRefreshError)
             },
         }?;
@@ -150,7 +150,14 @@ impl KokoKeywords {
             .unwrap_or(CACHE_EXPIRATION_DEFAULT);
 
         let api_response: ApiResponse =
-            serde_json::from_reader(response.into_reader()).map_err(|_| KokoError::ParseError)?;
+            match serde_json::from_reader(response.into_reader()) {
+                Ok(response) => Ok(response),
+                Err(response) => {
+                    eprintln!("{:?}", response);
+                    Err(KokoError::ParseError)
+                },
+            }?;
+
         let keywords_cache = KeywordsCache {
             keywords: api_response.regex,
             expires_at: SystemTime::now() + expires_in,
@@ -178,7 +185,7 @@ pub fn get_url() -> KokoResult<String> {
     }
 }
 
-fn str_from_c<'a>(c_str: *const libc::c_char) -> Option<&'a str> {
+fn str_from_c<'a>(c_str: *const std::os::raw::c_char) -> Option<&'a str> {
     if c_str.is_null() {
         None
     } else {
@@ -202,9 +209,9 @@ pub fn koko_keywords_match(input: &str, filter: &str, version: Option<&str>) -> 
 
 #[no_mangle]
 pub extern "C" fn c_koko_keywords_match(
-    input: *const libc::c_char,
-    filter: *const libc::c_char,
-    version: *const libc::c_char,
+    input: *const std::os::raw::c_char ,
+    filter: *const std::os::raw::c_char ,
+    version: *const std::os::raw::c_char ,
 ) -> isize {
     let input = str_from_c(input).expect("Input is required");
     let filter = str_from_c(filter).expect("Filter is required");
@@ -281,6 +288,27 @@ mod test {
 
         assert_eq!(
             x.verify(" badword   ", "", None),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn test_case_insensitive() {
+        let api_response: ApiResponse =
+            serde_json::from_str("{ \"regex\": {\"keywords\": [\"^badword$\"], \"preprocess\": \" \"} }").unwrap();
+        let mut x = KokoKeywords {
+            keywords: HashMap::from([(
+                "_latest".to_string(),
+                KeywordsCache {
+                    keywords: api_response.regex,
+                    expires_at: SystemTime::now() + Duration::new(1000, 0),
+                },
+            )]),
+            url: "http://localhost".to_string(),
+        };
+
+        assert_eq!(
+            x.verify("Badword", "", None),
             Ok(true)
         );
     }
