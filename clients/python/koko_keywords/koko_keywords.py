@@ -4,14 +4,13 @@ from cffi import FFI
 ffi = FFI()
 
 def find_and_load_dylib():
-  current_dir = os.path.dirname(os.path.abspath(__file__))
-
   ffi.cdef("""
   int c_koko_keywords_match(const char *input, const char *filter, const char *version);
   """)
 
   filname = None
   uname = os.uname()
+  current_dir = os.path.dirname(os.path.abspath(__file__))
 
   if os.getenv("KOKO_LIB_PATH"):
       return ffi.dlopen(os.getenv("KOKO_LIB_PATH"))
