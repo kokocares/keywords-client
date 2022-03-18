@@ -50,6 +50,8 @@ Use this to pin to a specific version of the regex otherwise the endpoint return
 KokoKeywords.match("sewerslide", version: "20220206")
 ```
 
+We do not recommend setting this as we frequently update keywords for better matching performance. 
+
 ## Performance
 The underlying library is written in Rust and cross-compiled to the four major CPU targets. Regexes are cached based on the cache expiration headers (currently set to an hour). This ensures very low latency and overhead (< 1μs/req).
 
