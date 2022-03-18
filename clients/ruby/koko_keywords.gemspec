@@ -9,10 +9,17 @@ Gem::Specification.new do |spec|
   spec.authors       = ["Kareem Kouddous"]
   spec.email         = ["kkouddous@gmail.com"]
 
-  spec.summary       = "A python client  for the Koko Keywords API. The client handles caching to ensure very low latency."
-  spec.description   = File.open('README.md').read
+  spec.summary       = "A ruby client for the Koko Keywords API"
+  spec.description   = "A ruby client for the Koko Keywords API. The client handles caching to ensure very low latency."
   spec.homepage      = "https://api-docs.kokocares.org"
   spec.license       = "MIT"
+  spec.metadata      = {
+    'bug_tracker_uri' => 'https://github.com/kokocares/keywords-client/issues',
+    'changelog_uri' => 'https://api-docs.kokocares.org/docs/changelog',
+    'documentation_uri' => 'https://api-docs.kokocares.org/docs/python',
+    'homepage_uri' => 'https://api-docs.kokocares.org',
+    "source_code_uri" => "https://github.com/kokocares/keywords-client/tree/main/clients/ruby"
+  }
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
