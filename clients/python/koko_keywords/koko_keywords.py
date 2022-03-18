@@ -14,8 +14,7 @@ def find_and_load_dylib():
   uname = os.uname()
 
   if os.getenv("KOKO_LIB_PATH"):
-      current_dir = ""
-      filename = os.getenv("KOKO_LIB_PATH")
+      return ffi.dlopen(os.getenv("KOKO_LIB_PATH"))
   elif uname.sysname == 'Darwin' and uname.machine == 'arm64':
       filename = 'libkoko_arm64.dylib'
   elif uname.sysname == 'Darwin' and uname.machine == 'x86_64':
@@ -27,7 +26,7 @@ def find_and_load_dylib():
   else:
     raise LookupError(f'Unsupported platform {uname.sysname}, {uname.machine} contact api@kokocares.org for support')
 
-  return ffi.dlopen(current_dir + '/lib/' + filename)
+  return ffi.dlopen(current_dir + '/clib/' + filename)
 
 lib = find_and_load_dylib()
 

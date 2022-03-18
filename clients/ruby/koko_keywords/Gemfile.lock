@@ -28,10 +28,10 @@ PLATFORMS
   arm64-darwin-21
 
 DEPENDENCIES
-  bundler
+  bundler (< 2.4)
   koko_keywords!
-  rake
-  rspec
+  rake (< 13.1)
+  rspec (< 3.12)
 
 BUNDLED WITH
    2.3.9

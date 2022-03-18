@@ -1,10 +1,31 @@
 require "koko_keywords/version"
 require 'ffi'
+require 'etc'
 
 module KokoKeywords
   module NativeWrapper
+    def self.lib_path
+      uname = Etc.uname
+
+      if ENV["KOKO_LIB_PATH"]
+          return ENV["KOKO_LIB_PATH"]
+      elsif uname[:sysname] == 'Darwin' and uname[:machine] == 'arm64'
+          filename = 'libkoko_arm64.dylib'
+      elsif uname[:sysname] == 'Darwin' and uname[:machine] == 'x86_64'
+          filename = 'libkoko_x86_64.dylib'
+      elsif uname[:sysname] == 'Linux' and uname[:machine] == 'x86_64'
+          filename = 'libkoko_x86_64.so'
+      elsif uname[:sysname] == 'Linux' and uname[:machine] == 'arm64'
+          filename = 'libkoko_arm64.so'
+      else
+        raise RuntimeError("Unsupported platform #{uname[:sysname]}, #{uname[:machine]} contact api@kokocares.org for support")
+      end
+
+      __dir__ + '/../clib/' + filename
+    end
+
     extend FFI::Library
-    ffi_lib "../../python/koko_keywords/lib/libkoko_arm64.dylib"
+    ffi_lib lib_path
     attach_function :c_koko_keywords_match, [:string, :string, :string], :int
   end
 
@@ -24,6 +45,6 @@ module KokoKeywords
       raise RuntimeError.new("Invalid url. Please ensure the url used is valid.")
     end
 
-    return !match_value.zero?
+    !match_value.zero?
   end
 end
