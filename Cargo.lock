@@ -170,7 +170,6 @@ version = "0.0.1"
 dependencies = [
  "cache_control",
  "lazy_static",
- "libc",
  "regex",
  "serde",
  "serde_json",
