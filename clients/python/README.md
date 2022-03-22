@@ -1,7 +1,7 @@
 Koko Keyword Python Client
 ============
 
-A python client  for the [Koko Keywords API](https://r.kokocares.org/koko_keywords/docs). The client handles caching to ensure very low latency.
+A python client  for the [Koko Keywords API](https://developers.kokocares.org). The client handles caching to ensure very low latency.
 
 
 ## Install
@@ -13,7 +13,7 @@ pip install koko_keywords
 ## Usage
 
 Set the `KOKO_KEYWORDS_AUTH` environment to the authentication string provided
-by Koko (contact us at api@kokocares.org if you would like one).
+by Koko. To get an api key, complete our [sign up form](https://r.kokocares.org/api_signup).
 
 ```
 export KOKO_KEYWORDS_AUTH=username:password
