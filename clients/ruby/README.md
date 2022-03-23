@@ -1,4 +1,4 @@
-Koko Keyword Python Client
+Koko Keyword Ruby Client
 ============
 
 A ruby client  for the [Koko Keywords API](https://developers.kokocares.org). The client handles caching to ensure very low latency.
