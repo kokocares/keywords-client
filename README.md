@@ -6,6 +6,7 @@ A multi platform, native client with bindings (soon) to all major languages for 
 ## Language Bindings
 - [Python](clients/python)
 - [Ruby](clients/ruby)
+- [Go](clients/go)
 
 ## License
 
