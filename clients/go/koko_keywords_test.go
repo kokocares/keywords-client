@@ -2,7 +2,7 @@ package koko_keywords
 
 import (
   "testing"
-  "github.com/kokocares/keyword-client/clients/go/koko_keywords"
+  "github.com/kokocares/keywords-client/clients/go/koko_keywords"
   "fmt"
 )
 
