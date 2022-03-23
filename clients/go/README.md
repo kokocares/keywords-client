@@ -1,4 +1,4 @@
-Koko Keyword Python Client
+Koko Keyword Go Client
 ============
 
 A go client  for the [Koko Keywords API](https://developers.kokocares.org). The client handles caching to ensure very low latency.
@@ -22,9 +22,9 @@ Download the correct library for your platform:
 - [OSX,
   ARM64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_arm64.dylib)
 - [Linux,
-  x86_64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_x86_64.dylib)
+  x86_64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_x86_64.so)
 - [Linux,
-  ARM64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_arm64.dylib)
+  ARM64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_arm64.so)
 
 Move the file to your shared library directory and rename the library removing
 the os/architecture label and make sure the file has execution prviledges:
@@ -47,7 +47,7 @@ export export LD_LIBRARY_PATH=/usr/local/lib
 Get the module
 
 ```
-go get github.com/kokocares/keywords-client/clients/go/koko_keywords
+go get github.com/kokocares/keywords-client/clients/go/koko_keywords@v0.1.0
 ```
 
 ## Usage
