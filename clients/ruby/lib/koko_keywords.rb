@@ -7,16 +7,18 @@ module KokoKeywords
     def self.lib_path
       uname = Etc.uname
 
+      filename = 'libkoko_keywords'
+
       if ENV["KOKO_LIB_PATH"]
           return ENV["KOKO_LIB_PATH"]
       elsif uname[:sysname] == 'Darwin' and uname[:machine] == 'arm64'
-          filename = 'libkoko_arm64.dylib'
+          filename = filename + '_arm64.dylib'
       elsif uname[:sysname] == 'Darwin' and uname[:machine] == 'x86_64'
-          filename = 'libkoko_x86_64.dylib'
+          filename = filename + '_x86_64.dylib'
       elsif uname[:sysname] == 'Linux' and uname[:machine] == 'x86_64'
-          filename = 'libkoko_x86_64.so'
+          filename = filename + '_x86_64.so'
       elsif uname[:sysname] == 'Linux' and uname[:machine] == 'arm64'
-          filename = 'libkoko_arm64.so'
+          filename = filename + '_arm64.so'
       else
         raise RuntimeError("Unsupported platform #{uname[:sysname]}, #{uname[:machine]} contact api@kokocares.org for support")
       end

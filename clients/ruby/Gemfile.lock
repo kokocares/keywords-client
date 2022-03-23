@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    koko_keywords (0.0.1)
+    koko_keywords (0.1.0)
       ffi (~> 1.15)
 
 GEM
