@@ -218,8 +218,9 @@ impl KokoKeywords {
 
         let api_response: ApiResponse = match serde_json::from_reader(response.into_reader()) {
             Ok(response) => Ok(response),
-            Err(_) => {
-                Err(KokoError::ParseError)
+            Err(err) => {
+                eprintln!("[koko-keywords] Failed to parse ({:?})", err);
+                return Ok(())
             }
         }?;
 
@@ -349,7 +350,7 @@ mod test {
 
         let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
 
-        assert_eq!(x.verify("hello", "", None), Err(KokoError::ParseError));
+        assert_eq!(x.verify("kms", "", None), Ok(true));
         keyword_mock.assert();
     }
 
