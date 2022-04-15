@@ -52,7 +52,6 @@ type KokoResult<T> = Result<T, KokoError>;
 pub enum KokoError {
     AuthOrUrlMissing = -1,
     InvalidCredentials = -2,
-    CacheRefreshError = -3,
     ParseError = -4,
     InvalidUrl = -5,
 }
@@ -112,7 +111,6 @@ impl KokoKeywords {
 
                 'keyword_loop: for re_keyword in &keyword_cache.keywords.keywords {
                     let filters: Vec<&str> = filter.split(":").collect();
-                    let mut filter_matches: Vec<bool> = Vec::new();
 
                     for filter in filters {
                         if filter == "" {
@@ -130,11 +128,7 @@ impl KokoKeywords {
                             _ => false,
                         };
 
-                        filter_matches.push(filter_matched);
-                    }
-
-                    for filter_match in filter_matches {
-                        if !filter_match {
+                        if !filter_matched {
                             continue 'keyword_loop;
                         }
                     }
@@ -145,14 +139,11 @@ impl KokoKeywords {
                 }
 
                 return Ok(false);
-            } else {
-                self.load_cache(version)?;
-                self.verify(keyword, filter, version)
             }
-        } else {
-            self.load_cache(version)?;
-            self.verify(keyword, filter, version)
         }
+
+        self.load_cache(version)?;
+        self.verify(keyword, filter, version)
     }
 
     pub fn load_cache(&mut self, version: Option<&str>) -> KokoResult<()> {
@@ -320,6 +311,28 @@ mod test {
     }
 
     #[test]
+    fn test_expired_cache() {
+        let api_response: ApiResponse =
+            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
+        let mut x = KokoKeywords {
+            keywords: HashMap::from([(
+                "latest".to_string(),
+                KeywordsCache {
+                    keywords: api_response.regexes,
+                    expires_at: SystemTime::now() - Duration::new(1000, 0),
+                },
+            )]),
+            url: "http://localhost".to_string(),
+        };
+
+        assert_eq!(x.verify("hello", "", None), Ok(false));
+
+        assert_eq!(x.verify("kms", "", None), Ok(true));
+
+        assert_eq!(x.verify(" kms   ", "", None), Ok(true));
+    }
+
+    #[test]
     fn test_case_insensitive() {
         let api_response: ApiResponse =
             serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
@@ -340,7 +353,7 @@ mod test {
     #[test]
     fn test_filters() {
         let api_response: ApiResponse =
-            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
+            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "severity":"medium", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
         let mut x = KokoKeywords {
             keywords: HashMap::from([(
                 "latest".to_string(),
@@ -364,6 +377,11 @@ mod test {
         assert_eq!(
             x.verify("kms", "category=suicide:severity=high", None),
             Ok(true)
+        );
+
+        assert_eq!(
+            x.verify("suicidal", "category=suicide:severity=high", None),
+            Ok(false)
         );
     }
 }
