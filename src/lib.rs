@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::time::Duration;
 use std::{collections::HashMap, env, ffi::CStr, fmt, ops, sync::Mutex, time::SystemTime};
-use ureq::{Error, ErrorKind, Response};
+use ureq::{Error, ErrorKind};
 
 const URL: &str = "api.kokocares.org/keywords";
 const CACHE_EXPIRATION_DEFAULT: Duration = Duration::from_secs(3600);
@@ -69,28 +69,45 @@ struct Keyword {
     pub confidence: String,
 }
 
-struct KeywordsCache {
-    pub expires_at: SystemTime,
-    pub keywords: Keywords,
-}
-
 #[derive(Deserialize, Debug)]
 struct ApiResponse {
     pub regexes: Keywords,
 }
 
+#[derive(Debug)]
+struct KeywordsCache {
+    pub expires_at: SystemTime,
+    pub keywords: Keywords,
+}
+
+impl KeywordsCache {
+    pub fn new(json: String, expires_at: SystemTime) -> Self {
+        let default_response: ApiResponse = match serde_json::from_str(json.as_str()) {
+            Ok(response) => response,
+            Err(_) => {
+                panic!("Unable to parse default json")
+            }
+        };
+
+        Self {
+            keywords: default_response.regexes,
+            expires_at: expires_at,
+        }
+    }
+}
+
 struct KokoKeywords {
     pub keywords: HashMap<String, KeywordsCache>,
     pub url: String,
-    pub default: String,
 }
 
 impl KokoKeywords {
-    pub fn new(url: String) -> Self {
+    pub fn new(url: String, default: KeywordsCache) -> Self {
+        let mut keywords = HashMap::new();
+        keywords.insert("latest".to_string(), default);
         Self {
-            keywords: HashMap::new(),
+            keywords: keywords,
             url,
-            default: include_str!("keywords.json").to_string()
         }
     }
 
@@ -180,13 +197,14 @@ impl KokoKeywords {
                 if tranport_error.kind() == ErrorKind::InvalidUrl {
                     Err(KokoError::InvalidUrl)
                 } else {
-                    Ok(Response::new(200, "Success", self.default.as_str()).unwrap())
+                    eprintln!("[koko-keywords] Failed to load cache ({:?})", tranport_error.message());
+                    return Ok(())
                 }
             }
             Err(Error::Status(403, _)) => Err(KokoError::InvalidCredentials),
             Err(Error::Status(status, response)) => {
                 eprintln!("[koko-keywords] Failed to load cache ({}: {})", status, response.status_text());
-                Ok(Response::new(200, "Success", self.default.as_str()).unwrap())
+                return Ok(())
             }
         }?;
 
@@ -198,12 +216,7 @@ impl KokoKeywords {
             .flatten()
             .unwrap_or(CACHE_EXPIRATION_DEFAULT);
 
-        let json_body = match response.into_string() {
-            Ok(json) => Ok(json),
-            Err(_) => Err(KokoError::ParseError),
-        }?;
-
-        let api_response: ApiResponse = match serde_json::from_str(&json_body) {
+        let api_response: ApiResponse = match serde_json::from_reader(response.into_reader()) {
             Ok(response) => Ok(response),
             Err(_) => {
                 Err(KokoError::ParseError)
@@ -215,15 +228,18 @@ impl KokoKeywords {
             expires_at: SystemTime::now() + expires_in,
         };
         self.keywords.insert(cache_key.to_string(), keywords_cache);
-        self.default = json_body;
 
         Ok(())
     }
 }
 
 lazy_static! {
-    static ref MATCHER: Mutex<KokoResult<KokoKeywords>> =
-        Mutex::new(get_url().map(KokoKeywords::new));
+    static ref MATCHER: Mutex<KokoResult<KokoKeywords>> = {
+        match get_url() {
+            Ok(url) => Mutex::new(Ok(KokoKeywords::new(url, KeywordsCache::new(include_str!("keywords.json").to_string(), SystemTime::UNIX_EPOCH)))),
+            Err(err) => Mutex::new(Err(err)),
+        }
+    };
 }
 
 pub fn get_url() -> KokoResult<String> {
@@ -287,7 +303,22 @@ mod test {
     use super::*;
     use serde_json::json;
 
-    const DEFAULT_KEYWORDS: &str = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}], "preprocess": " "} }"#;
+    const DEFAULT_RESPONSE: &str = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "} }"#;
+
+    #[test]
+    fn test_koko_keywords_match_wtih_failing_server() {
+        let server = httpmock::MockServer::start();
+
+        let keyword_mock = server.mock(|when, then| {
+            when.path("/keywords");
+            then.status(500);
+        });
+
+        env::set_var("KOKO_KEYWORDS_URL", server.url("/keywords"));
+
+        assert_eq!(koko_keywords_match("a4a", "", None), Ok(true));
+        keyword_mock.assert();
+    }
 
     #[test]
     fn test_failing_server() {
@@ -298,15 +329,11 @@ mod test {
             then.status(500);
         });
 
-        let mut x = KokoKeywords {
-            keywords: HashMap::new(),
-            url: server.url("/keywords"),
-            default: DEFAULT_KEYWORDS.to_string(),
-        };
+        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
 
         assert_eq!(x.verify("hello", "", None), Ok(false));
         assert_eq!(x.verify("kms", "", None), Ok(true));
-        keyword_mock.assert();
+        keyword_mock.assert_hits(2);
     }
 
     #[test]
@@ -320,11 +347,7 @@ mod test {
                 .json_body(json!({}));
         });
 
-        let mut x = KokoKeywords {
-            keywords: HashMap::new(),
-            url: server.url("/keywords"),
-            default: DEFAULT_KEYWORDS.to_string(),
-        };
+        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
 
         assert_eq!(x.verify("hello", "", None), Err(KokoError::ParseError));
         keyword_mock.assert();
@@ -332,11 +355,7 @@ mod test {
 
     #[test]
     fn test_invalid_url() {
-        let mut x = KokoKeywords {
-            keywords: HashMap::new(),
-            url: "".to_string(),
-            default: DEFAULT_KEYWORDS.to_string(),
-        };
+        let mut x = KokoKeywords::new("".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
 
         assert_eq!(x.verify("hello", "", None), Err(KokoError::InvalidUrl));
     }
@@ -349,47 +368,12 @@ mod test {
             when.path("/keywords");
             then.status(200)
                 .header("content-type", "application/json")
-                .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "}}));
+                .json_body(json!({ "regexes": {"keywords": [{"regex": "^sewerslide$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "}}));
         });
 
-        let mut x = KokoKeywords {
-            keywords: HashMap::new(),
-            url: server.url("/keywords"),
-            default: DEFAULT_KEYWORDS.to_string(),
-        };
+        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
 
-        assert_eq!(x.verify("hello", "", None), Ok(false));
-        assert_eq!(x.verify("kms", "", None), Ok(true));
-        assert_eq!(x.verify(" kms   ", "", None), Ok(true));
-        keyword_mock.assert();
-    }
-
-    #[test]
-    fn test_expired_cache() {
-        let server = httpmock::MockServer::start();
-
-        let keyword_mock = server.mock(|when, then| {
-            when.path("/keywords");
-            then.status(200)
-                .header("content-type", "application/json")
-                .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "}}));
-        });
-
-        let api_response: ApiResponse =
-            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
-        let mut x = KokoKeywords {
-            keywords: HashMap::from([(
-                "latest".to_string(),
-                KeywordsCache {
-                    keywords: api_response.regexes,
-                    expires_at: SystemTime::now() - Duration::new(1000, 0),
-                },
-            )]),
-            url: server.url("/keywords"),
-            default: DEFAULT_KEYWORDS.to_string(),
-        };
-
-        assert_eq!(x.verify("suicide", "", None), Ok(true));
+        assert_eq!(x.verify("sewerslide", "", None), Ok(true));
         keyword_mock.assert();
     }
 
@@ -404,11 +388,7 @@ mod test {
                 .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "}}));
         });
 
-        let mut x = KokoKeywords {
-            keywords: HashMap::new(),
-            url: server.url("/keywords"),
-            default: DEFAULT_KEYWORDS.to_string(),
-        };
+        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
 
         assert_eq!(x.verify("suicide", "", None), Ok(true));
         keyword_mock.assert();
@@ -426,38 +406,22 @@ mod test {
 
     #[test]
     fn test_case_insensitive() {
-        let api_response: ApiResponse =
-            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
-        let mut x = KokoKeywords {
-            keywords: HashMap::from([(
-                "latest".to_string(),
-                KeywordsCache {
-                    keywords: api_response.regexes,
-                    expires_at: SystemTime::now() + Duration::new(1000, 0),
-                },
-            )]),
-            url: "http://localhost".to_string(),
-            default: DEFAULT_KEYWORDS.to_string(),
-        };
+        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
 
-        assert_eq!(x.verify("kms", "", None), Ok(true));
+        assert_eq!(x.verify("KMS", "", None), Ok(true));
+    }
+
+    #[test]
+    fn test_case_preprocessing() {
+        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
+
+        assert_eq!(x.verify("  kms  ", "", None), Ok(true));
     }
 
     #[test]
     fn test_filters() {
-        let api_response: ApiResponse =
-            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "severity":"medium", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
-        let mut x = KokoKeywords {
-            keywords: HashMap::from([(
-                "latest".to_string(),
-                KeywordsCache {
-                    keywords: api_response.regexes,
-                    expires_at: SystemTime::now() + Duration::new(1000, 0),
-                },
-            )]),
-            url: "http://localhost".to_string(),
-            default: DEFAULT_KEYWORDS.to_string(),
-        };
+        let response = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "severity":"medium", "confidence":"high"}], "preprocess": " "} }"#.to_string();
+        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(response, SystemTime::UNIX_EPOCH));
 
         assert_eq!(x.verify("kms", "category=suicide", None), Ok(true));
         assert_eq!(x.verify("kms", "category=eating", None), Ok(false));
