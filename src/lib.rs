@@ -1,8 +1,8 @@
 use cache_control::CacheControl;
-use std::{ffi::CStr, sync::Mutex, env, collections::HashMap, time::SystemTime, ops, fmt};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::time::Duration;
+use std::{collections::HashMap, env, ffi::CStr, fmt, ops, sync::Mutex, time::SystemTime};
 use ureq::{Error, ErrorKind};
 
 const URL: &str = "api.kokocares.org/keywords";
@@ -13,12 +13,15 @@ pub struct Regex(regex::Regex);
 
 impl ops::Deref for Regex {
     type Target = regex::Regex;
-    fn deref(&self) -> &regex::Regex { &self.0 }
+    fn deref(&self) -> &regex::Regex {
+        &self.0
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for Regex {
     fn deserialize<D>(de: D) -> Result<Regex, D::Error>
-    where D: serde::Deserializer<'de>
+    where
+        D: serde::Deserializer<'de>,
     {
         use serde::de::{Error, Visitor};
 
@@ -32,9 +35,9 @@ impl<'de> serde::Deserialize<'de> for Regex {
             }
 
             fn visit_str<E: Error>(self, v: &str) -> Result<Regex, E> {
-                regex::Regex::new(v).map(Regex).map_err(|err| {
-                    E::custom(err.to_string())
-                })
+                regex::Regex::new(v)
+                    .map(Regex)
+                    .map_err(|err| E::custom(err.to_string()))
             }
         }
 
@@ -55,8 +58,16 @@ pub enum KokoError {
 
 #[derive(Deserialize, Debug)]
 struct Keywords {
-    pub keywords: Vec<Regex>,
+    pub keywords: Vec<Keyword>,
     pub preprocess: Regex,
+}
+
+#[derive(Deserialize, Debug)]
+struct Keyword {
+    pub regex: Regex,
+    pub category: String,
+    pub severity: String,
+    pub confidence: String,
 }
 
 struct KeywordsCache {
@@ -66,7 +77,7 @@ struct KeywordsCache {
 
 #[derive(Deserialize, Debug)]
 struct ApiResponse {
-    pub regex: Keywords,
+    pub regexes: Keywords,
 }
 
 struct KokoKeywords {
@@ -88,14 +99,46 @@ impl KokoKeywords {
         filter: &str,
         version: Option<&str>,
     ) -> KokoResult<bool> {
-        let cache_key = format!("{}_{}", filter, version.unwrap_or("latest"));
+        let cache_key = format!("{}", version.unwrap_or("latest"));
 
         if let Some(keyword_cache) = self.keywords.get(&cache_key) {
             if SystemTime::now() < keyword_cache.expires_at {
-                let keyword = keyword_cache.keywords.preprocess.replace_all(keyword, "").to_lowercase();
+                let keyword = keyword_cache
+                    .keywords
+                    .preprocess
+                    .replace_all(keyword, "")
+                    .to_lowercase();
 
-                for re_keyword in &keyword_cache.keywords.keywords {
-                    if re_keyword.is_match(&keyword) {
+                'keyword_loop: for re_keyword in &keyword_cache.keywords.keywords {
+                    let filters: Vec<&str> = filter.split(":").collect();
+                    let mut filter_matches: Vec<bool> = Vec::new();
+
+                    for filter in filters {
+                        if filter == "" {
+                            continue;
+                        }
+
+                        let filter: Vec<&str> = filter.split("=").collect();
+                        let filter_key = filter[0];
+                        let filter_values = filter[1];
+
+                        let filter_matched = match filter_key {
+                            "category" => filter_values.contains(&re_keyword.category),
+                            "severity" => filter_values.contains(&re_keyword.severity),
+                            "confidence" => filter_values.contains(&re_keyword.confidence),
+                            _ => false,
+                        };
+
+                        filter_matches.push(filter_matched);
+                    }
+
+                    for filter_match in filter_matches {
+                        if !filter_match {
+                            continue 'keyword_loop;
+                        }
+                    }
+
+                    if re_keyword.regex.is_match(&keyword) {
                         return Ok(true);
                     }
                 }
@@ -116,9 +159,8 @@ impl KokoKeywords {
 
         eprintln!("[koko-keywords] Loading cache for '{}'", cache_key);
 
-        let request = ureq::get(&self.url);
+        let request = ureq::get(&self.url).set("X-API-VERSION", "v2");
 
-        let request = request.query("filter", filter);
         let request = if let Some(version) = version {
             request.query("version", version)
         } else {
@@ -133,12 +175,12 @@ impl KokoKeywords {
                 } else {
                     Err(KokoError::CacheRefreshError)
                 }
-            },
+            }
             Err(Error::Status(403, _)) => Err(KokoError::InvalidCredentials),
             Err(response) => {
                 eprintln!("{:?}", response);
                 Err(KokoError::CacheRefreshError)
-            },
+            }
         }?;
 
         let expires_in = response
@@ -149,17 +191,16 @@ impl KokoKeywords {
             .flatten()
             .unwrap_or(CACHE_EXPIRATION_DEFAULT);
 
-        let api_response: ApiResponse =
-            match serde_json::from_reader(response.into_reader()) {
-                Ok(response) => Ok(response),
-                Err(response) => {
-                    eprintln!("{:?}", response);
-                    Err(KokoError::ParseError)
-                },
-            }?;
+        let api_response: ApiResponse = match serde_json::from_reader(response.into_reader()) {
+            Ok(response) => Ok(response),
+            Err(response) => {
+                eprintln!("{:?}", response);
+                Err(KokoError::ParseError)
+            }
+        }?;
 
         let keywords_cache = KeywordsCache {
-            keywords: api_response.regex,
+            keywords: api_response.regexes,
             expires_at: SystemTime::now() + expires_in,
         };
         self.keywords.insert(cache_key.to_string(), keywords_cache);
@@ -206,17 +247,15 @@ pub fn koko_keywords_match(input: &str, filter: &str, version: Option<&str>) -> 
         .verify(input, filter, version)
 }
 
-
 #[no_mangle]
 pub extern "C" fn c_koko_keywords_match(
-    input: *const std::os::raw::c_char ,
-    filter: *const std::os::raw::c_char ,
-    version: *const std::os::raw::c_char ,
+    input: *const std::os::raw::c_char,
+    filter: *const std::os::raw::c_char,
+    version: *const std::os::raw::c_char,
 ) -> isize {
     let input = str_from_c(input).expect("Input is required");
     let filter = str_from_c(filter).expect("Filter is required");
     let version = str_from_c(version);
-
 
     let result = koko_keywords_match(input, filter, version);
     match result {
@@ -255,60 +294,75 @@ mod test {
             url: "".to_string(),
         };
 
-        assert_eq!(
-            x.verify("hello", "", None),
-            Err(KokoError::InvalidUrl)
-        );
+        assert_eq!(x.verify("hello", "", None), Err(KokoError::InvalidUrl));
     }
 
     #[test]
     fn test_unexpired_cache() {
         let api_response: ApiResponse =
-            serde_json::from_str("{ \"regex\": {\"keywords\": [\"^badword$\"], \"preprocess\": \" \"} }").unwrap();
+            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
         let mut x = KokoKeywords {
             keywords: HashMap::from([(
-                "_latest".to_string(),
+                "latest".to_string(),
                 KeywordsCache {
-                    keywords: api_response.regex,
+                    keywords: api_response.regexes,
                     expires_at: SystemTime::now() + Duration::new(1000, 0),
                 },
             )]),
             url: "http://localhost".to_string(),
         };
 
-        assert_eq!(
-            x.verify("hello", "", None),
-            Ok(false)
-        );
+        assert_eq!(x.verify("hello", "", None), Ok(false));
 
-        assert_eq!(
-            x.verify("badword", "", None),
-            Ok(true)
-        );
+        assert_eq!(x.verify("kms", "", None), Ok(true));
 
-        assert_eq!(
-            x.verify(" badword   ", "", None),
-            Ok(true)
-        );
+        assert_eq!(x.verify(" kms   ", "", None), Ok(true));
     }
 
     #[test]
     fn test_case_insensitive() {
         let api_response: ApiResponse =
-            serde_json::from_str("{ \"regex\": {\"keywords\": [\"^badword$\"], \"preprocess\": \" \"} }").unwrap();
+            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
         let mut x = KokoKeywords {
             keywords: HashMap::from([(
-                "_latest".to_string(),
+                "latest".to_string(),
                 KeywordsCache {
-                    keywords: api_response.regex,
+                    keywords: api_response.regexes,
                     expires_at: SystemTime::now() + Duration::new(1000, 0),
                 },
             )]),
             url: "http://localhost".to_string(),
         };
 
+        assert_eq!(x.verify("kms", "", None), Ok(true));
+    }
+
+    #[test]
+    fn test_filters() {
+        let api_response: ApiResponse =
+            serde_json::from_str(r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}], "preprocess": " "} }"#).unwrap();
+        let mut x = KokoKeywords {
+            keywords: HashMap::from([(
+                "latest".to_string(),
+                KeywordsCache {
+                    keywords: api_response.regexes,
+                    expires_at: SystemTime::now() + Duration::new(1000, 0),
+                },
+            )]),
+            url: "http://localhost".to_string(),
+        };
+
+        assert_eq!(x.verify("kms", "category=suicide", None), Ok(true));
+
+        assert_eq!(x.verify("kms", "category=eating", None), Ok(false));
+
         assert_eq!(
-            x.verify("Badword", "", None),
+            x.verify("kms", "category=suicide:severity=medium", None),
+            Ok(false)
+        );
+
+        assert_eq!(
+            x.verify("kms", "category=suicide:severity=high", None),
             Ok(true)
         );
     }
