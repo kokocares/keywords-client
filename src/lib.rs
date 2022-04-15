@@ -3,10 +3,11 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::time::Duration;
 use std::{collections::HashMap, env, ffi::CStr, fmt, ops, sync::Mutex, time::SystemTime};
-use ureq::{Error, ErrorKind};
+use ureq::{Error, ErrorKind, Response};
 
 const URL: &str = "api.kokocares.org/keywords";
 const CACHE_EXPIRATION_DEFAULT: Duration = Duration::from_secs(3600);
+const KEYWORDS_DEFAULT: &str = include_str!("keywords.json");
 
 #[derive(Clone, Debug)]
 pub struct Regex(regex::Regex);
@@ -145,17 +146,17 @@ impl KokoKeywords {
 
                 return Ok(false);
             } else {
-                self.load_cache(filter, version)?;
+                self.load_cache(version)?;
                 self.verify(keyword, filter, version)
             }
         } else {
-            self.load_cache(filter, version)?;
+            self.load_cache(version)?;
             self.verify(keyword, filter, version)
         }
     }
 
-    pub fn load_cache(&mut self, filter: &str, version: Option<&str>) -> KokoResult<()> {
-        let cache_key = format!("{}_{}", filter, version.unwrap_or("latest"));
+    pub fn load_cache(&mut self, version: Option<&str>) -> KokoResult<()> {
+        let cache_key = format!("{}", version.unwrap_or("latest"));
 
         eprintln!("[koko-keywords] Loading cache for '{}'", cache_key);
 
@@ -173,13 +174,13 @@ impl KokoKeywords {
                 if tranport_error.kind() == ErrorKind::InvalidUrl {
                     Err(KokoError::InvalidUrl)
                 } else {
-                    Err(KokoError::CacheRefreshError)
+                    Ok(Response::new(200, "Success", KEYWORDS_DEFAULT).unwrap())
                 }
             }
             Err(Error::Status(403, _)) => Err(KokoError::InvalidCredentials),
             Err(response) => {
                 eprintln!("{:?}", response);
-                Err(KokoError::CacheRefreshError)
+                Ok(Response::new(200, "Success", KEYWORDS_DEFAULT).unwrap())
             }
         }?;
 
@@ -281,10 +282,9 @@ mod test {
             url: "http://localhost".to_string(),
         };
 
-        assert_eq!(
-            x.verify("hello", "", None),
-            Err(KokoError::CacheRefreshError)
-        );
+        assert_eq!(x.verify("hello", "", None), Ok(false));
+
+        assert_eq!(x.verify("kms", "", None), Ok(true));
     }
 
     #[test]
