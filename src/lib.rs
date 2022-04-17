@@ -2,7 +2,7 @@ use cache_control::CacheControl;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::time::{Duration, Instant};
-use std::{collections::HashMap, env, ffi::CStr, fmt, ops, sync::Mutex};
+use std::{env, ffi::CStr, fmt, ops, sync::Mutex};
 use ureq::{Error, ErrorKind};
 
 const URL: &str = "api.kokocares.org/keywords";
@@ -82,12 +82,7 @@ struct KeywordsCache {
 
 impl KeywordsCache {
     pub fn new(json: String, expires_at: Instant) -> Self {
-        let default_response: ApiResponse = match serde_json::from_str(json.as_str()) {
-            Ok(response) => response,
-            Err(_) => {
-                panic!("Unable to parse default json")
-            }
-        };
+        let default_response: ApiResponse = serde_json::from_str(json.as_str()).expect("Unable to parse default json");
 
         Self {
             keywords: default_response.regexes,
@@ -97,16 +92,14 @@ impl KeywordsCache {
 }
 
 struct KokoKeywords {
-    pub keywords: HashMap<String, KeywordsCache>,
+    pub keywords: KeywordsCache,
     pub url: String,
 }
 
 impl KokoKeywords {
     pub fn new(url: String, default: KeywordsCache) -> Self {
-        let mut keywords = HashMap::new();
-        keywords.insert("latest".to_string(), default);
         Self {
-            keywords,
+            keywords: default,
             url,
         }
     }
@@ -115,30 +108,13 @@ impl KokoKeywords {
         &mut self,
         keyword: &str,
         filter: &str,
-        version: Option<&str>,
     ) -> KokoResult<bool> {
-        let cache_key = version.unwrap_or("latest").to_string();
-
-        let keyword_cache = if let Some(keyword_cache) = self.keywords.get(&cache_key) {
-            if Instant::now() < keyword_cache.expires_at {
-                keyword_cache
-            } else {
-                self.load_cache(version)?;
-
-                match self.keywords.get(&cache_key) {
-                    Some(keyword_cache) => keyword_cache,
-                    None => panic!("Cache not loaded, this is a bug"),
-                }
-            }
+        let keyword_cache = if Instant::now() < self.keywords.expires_at {
+            &self.keywords
         } else {
-            self.load_cache(version)?;
-
-            match self.keywords.get(&cache_key) {
-                Some(keyword_cache) => keyword_cache,
-                None => panic!("Cache not loaded, this is a bug"),
-            }
+            self.load_cache()?;
+            &self.keywords
         };
-
 
         let keyword = keyword_cache
             .keywords
@@ -178,18 +154,10 @@ impl KokoKeywords {
         Ok(false)
     }
 
-    pub fn load_cache(&mut self, version: Option<&str>) -> KokoResult<()> {
-        let cache_key = version.unwrap_or("latest").to_string();
-
-        eprintln!("[koko-keywords] Loading cache for '{}'", cache_key);
+    pub fn load_cache(&mut self) -> KokoResult<()> {
+        eprintln!("[koko-keywords] Loading cache");
 
         let request = ureq::get(&self.url).set("X-API-VERSION", "v2");
-
-        let request = if let Some(version) = version {
-            request.query("version", version)
-        } else {
-            request
-        };
 
         let response = match request.call() {
             Ok(response) => Ok(response),
@@ -223,7 +191,7 @@ impl KokoKeywords {
             keywords: api_response.regexes,
             expires_at: Instant::now() + expires_in,
         };
-        self.keywords.insert(cache_key, keywords_cache);
+        self.keywords = keywords_cache;
 
         Ok(())
     }
@@ -262,26 +230,24 @@ fn str_from_c<'a>(c_str: *const std::os::raw::c_char) -> Option<&'a str> {
     }
 }
 
-pub fn koko_keywords_match(input: &str, filter: &str, version: Option<&str>) -> KokoResult<bool> {
+pub fn koko_keywords_match(input: &str, filter: &str) -> KokoResult<bool> {
     MATCHER
         .lock()
         .unwrap()
         .as_mut()
         .map_err(|e| *e)?
-        .verify(input, filter, version)
+        .verify(input, filter)
 }
 
 #[no_mangle]
 pub extern "C" fn c_koko_keywords_match(
     input: *const std::os::raw::c_char,
     filter: *const std::os::raw::c_char,
-    version: *const std::os::raw::c_char,
 ) -> isize {
     let input = str_from_c(input).expect("Input is required");
     let filter = str_from_c(filter).expect("Filter is required");
-    let version = str_from_c(version);
 
-    let result = koko_keywords_match(input, filter, version);
+    let result = koko_keywords_match(input, filter);
     match result {
         Ok(true) => 1,
         Ok(false) => 0,
@@ -307,7 +273,7 @@ mod test {
 
         env::set_var("KOKO_KEYWORDS_URL", server.url("/keywords"));
 
-        assert_eq!(koko_keywords_match("a4a", "", None), Ok(true));
+        assert_eq!(koko_keywords_match("a4a", ""), Ok(true));
         keyword_mock.assert();
     }
 
@@ -322,8 +288,8 @@ mod test {
 
         let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
-        assert_eq!(x.verify("hello", "", None), Ok(false));
-        assert_eq!(x.verify("kms", "", None), Ok(true));
+        assert_eq!(x.verify("hello", ""), Ok(false));
+        assert_eq!(x.verify("kms", ""), Ok(true));
         keyword_mock.assert_hits(2);
     }
 
@@ -340,7 +306,7 @@ mod test {
 
         let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
-        assert_eq!(x.verify("kms", "", None), Ok(true));
+        assert_eq!(x.verify("kms", ""), Ok(true));
         keyword_mock.assert();
     }
 
@@ -348,7 +314,7 @@ mod test {
     fn test_invalid_url() {
         let mut x = KokoKeywords::new("".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
-        assert_eq!(x.verify("hello", "", None), Err(KokoError::InvalidUrl));
+        assert_eq!(x.verify("hello", ""), Err(KokoError::InvalidUrl));
     }
 
     #[test]
@@ -364,7 +330,7 @@ mod test {
 
         let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
-        assert_eq!(x.verify("sewerslide", "", None), Ok(true));
+        assert_eq!(x.verify("sewerslide", ""), Ok(true));
         keyword_mock.assert();
     }
 
@@ -381,7 +347,7 @@ mod test {
 
         let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
-        assert_eq!(x.verify("suicide", "", None), Ok(true));
+        assert_eq!(x.verify("suicide", ""), Ok(true));
         keyword_mock.assert();
 
         let server = httpmock::MockServer::start();
@@ -391,7 +357,7 @@ mod test {
         });
         x.url = server.url("/keywords");
 
-        assert_eq!(x.verify("suicide", "", None), Ok(true));
+        assert_eq!(x.verify("suicide", ""), Ok(true));
         keyword_failing_mock.assert();
     }
 
@@ -399,14 +365,14 @@ mod test {
     fn test_case_insensitive() {
         let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
-        assert_eq!(x.verify("KMS", "", None), Ok(true));
+        assert_eq!(x.verify("KMS", ""), Ok(true));
     }
 
     #[test]
     fn test_case_preprocessing() {
         let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
-        assert_eq!(x.verify("  kms  ", "", None), Ok(true));
+        assert_eq!(x.verify("  kms  ", ""), Ok(true));
     }
 
     #[test]
@@ -414,18 +380,18 @@ mod test {
         let response = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "severity":"medium", "confidence":"high"}], "preprocess": " "} }"#.to_string();
         let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(response, Instant::now()));
 
-        assert_eq!(x.verify("kms", "category=suicide", None), Ok(true));
-        assert_eq!(x.verify("kms", "category=eating", None), Ok(false));
+        assert_eq!(x.verify("kms", "category=suicide"), Ok(true));
+        assert_eq!(x.verify("kms", "category=eating"), Ok(false));
         assert_eq!(
-            x.verify("kms", "category=suicide:severity=medium", None),
+            x.verify("kms", "category=suicide:severity=medium"),
             Ok(false)
         );
         assert_eq!(
-            x.verify("kms", "category=suicide:severity=high", None),
+            x.verify("kms", "category=suicide:severity=high"),
             Ok(true)
         );
         assert_eq!(
-            x.verify("suicidal", "category=suicide:severity=high", None),
+            x.verify("suicidal", "category=suicide:severity=high"),
             Ok(false)
         );
     }
