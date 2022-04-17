@@ -53,6 +53,7 @@ pub enum KokoError {
     InvalidCredentials = -2,
     ParseError = -4,
     InvalidUrl = -5,
+    InvalidFilter = -6,
 }
 
 #[derive(Deserialize, Debug)]
@@ -67,6 +68,17 @@ struct Keyword {
     pub category: String,
     pub severity: String,
     pub confidence: String,
+}
+
+impl Keyword {
+    pub fn match_filter(&self, filter_key: &str, filter_values: &str) -> bool {
+        match filter_key {
+            "category" => filter_values.contains(&self.category),
+            "severity" => filter_values.contains(&self.severity),
+            "confidence" => filter_values.contains(&self.confidence),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -122,36 +134,24 @@ impl KokoKeywords {
             .replace_all(keyword, "")
             .to_lowercase();
 
-        'keyword_loop: for re_keyword in &keyword_cache.keywords.keywords {
-            let filters: Vec<&str> = filter.split(':').collect();
-
-            for filter in filters {
-                if filter.is_empty() {
-                    continue;
+        let filters = filter
+            .split(':')
+            .filter(|f| !f.is_empty())
+            .map(|f| {
+                let mut splitparts = f.split('=');
+                match (splitparts.next(), splitparts.next()) {
+                    (Some(k), Some(v)) => Ok((k,v)),
+                    _ => Err(KokoError::InvalidFilter),
                 }
+            })
+            .collect::<KokoResult<Vec<_>>>()?;
 
-                let filter: Vec<&str> = filter.split('=').collect();
-                let filter_key = filter[0];
-                let filter_values = filter[1];
-
-                let filter_matched = match filter_key {
-                    "category" => filter_values.contains(&re_keyword.category),
-                    "severity" => filter_values.contains(&re_keyword.severity),
-                    "confidence" => filter_values.contains(&re_keyword.confidence),
-                    _ => false,
-                };
-
-                if !filter_matched {
-                    continue 'keyword_loop;
-                }
-            }
-
-            if re_keyword.regex.is_match(&keyword) {
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
+        Ok(keyword_cache.keywords.keywords.iter()
+            .any(|re_keyword|
+                filters.iter().all(|(k,v)| re_keyword.match_filter(k,v)) &&
+                re_keyword.regex.is_match(&keyword)
+            )
+        )
     }
 
     pub fn load_cache(&mut self) -> KokoResult<()> {
