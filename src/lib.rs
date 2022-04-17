@@ -1,8 +1,8 @@
 use cache_control::CacheControl;
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use std::time::Duration;
-use std::{collections::HashMap, env, ffi::CStr, fmt, ops, sync::Mutex, time::SystemTime};
+use std::time::{Duration, Instant};
+use std::{collections::HashMap, env, ffi::CStr, fmt, ops, sync::Mutex};
 use ureq::{Error, ErrorKind};
 
 const URL: &str = "api.kokocares.org/keywords";
@@ -76,12 +76,12 @@ struct ApiResponse {
 
 #[derive(Debug)]
 struct KeywordsCache {
-    pub expires_at: SystemTime,
+    pub expires_at: Instant,
     pub keywords: Keywords,
 }
 
 impl KeywordsCache {
-    pub fn new(json: String, expires_at: SystemTime) -> Self {
+    pub fn new(json: String, expires_at: Instant) -> Self {
         let default_response: ApiResponse = match serde_json::from_str(json.as_str()) {
             Ok(response) => response,
             Err(_) => {
@@ -120,7 +120,7 @@ impl KokoKeywords {
         let cache_key = format!("{}", version.unwrap_or("latest"));
 
         let keyword_cache = if let Some(keyword_cache) = self.keywords.get(&cache_key) {
-            if SystemTime::now() < keyword_cache.expires_at {
+            if Instant::now() < keyword_cache.expires_at {
                 keyword_cache
             } else {
                 self.load_cache(version)?;
@@ -193,13 +193,10 @@ impl KokoKeywords {
 
         let response = match request.call() {
             Ok(response) => Ok(response),
+            Err(Error::Transport(tranport_error)) if tranport_error.kind() == ErrorKind::InvalidUrl => Err(KokoError::InvalidUrl),
             Err(Error::Transport(tranport_error)) => {
-                if tranport_error.kind() == ErrorKind::InvalidUrl {
-                    Err(KokoError::InvalidUrl)
-                } else {
-                    eprintln!("[koko-keywords] Failed to load cache ({:?})", tranport_error.message());
-                    return Ok(())
-                }
+                eprintln!("[koko-keywords] Failed to load cache ({:?})", tranport_error.message());
+                return Ok(())
             }
             Err(Error::Status(403, _)) => Err(KokoError::InvalidCredentials),
             Err(Error::Status(status, response)) => {
@@ -217,16 +214,16 @@ impl KokoKeywords {
             .unwrap_or(CACHE_EXPIRATION_DEFAULT);
 
         let api_response: ApiResponse = match serde_json::from_reader(response.into_reader()) {
-            Ok(response) => Ok(response),
+            Ok(response) => response,
             Err(err) => {
                 eprintln!("[koko-keywords] Failed to parse ({:?})", err);
                 return Ok(())
             }
-        }?;
+        };
 
         let keywords_cache = KeywordsCache {
             keywords: api_response.regexes,
-            expires_at: SystemTime::now() + expires_in,
+            expires_at: Instant::now() + expires_in,
         };
         self.keywords.insert(cache_key.to_string(), keywords_cache);
 
@@ -237,7 +234,7 @@ impl KokoKeywords {
 lazy_static! {
     static ref MATCHER: Mutex<KokoResult<KokoKeywords>> = {
         match get_url() {
-            Ok(url) => Mutex::new(Ok(KokoKeywords::new(url, KeywordsCache::new(include_str!("keywords.json").to_string(), SystemTime::UNIX_EPOCH)))),
+            Ok(url) => Mutex::new(Ok(KokoKeywords::new(url, KeywordsCache::new(include_str!("keywords.json").to_string(), Instant::now())))),
             Err(err) => Mutex::new(Err(err)),
         }
     };
@@ -288,13 +285,8 @@ pub extern "C" fn c_koko_keywords_match(
 
     let result = koko_keywords_match(input, filter, version);
     match result {
-        Ok(r) => {
-            if r {
-                1
-            } else {
-                0
-            }
-        }
+        Ok(true) => 1,
+        Ok(false) => 0,
         Err(e) => e as isize,
     }
 }
@@ -330,7 +322,7 @@ mod test {
             then.status(500);
         });
 
-        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
+        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
         assert_eq!(x.verify("hello", "", None), Ok(false));
         assert_eq!(x.verify("kms", "", None), Ok(true));
@@ -348,7 +340,7 @@ mod test {
                 .json_body(json!({}));
         });
 
-        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
+        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
         assert_eq!(x.verify("kms", "", None), Ok(true));
         keyword_mock.assert();
@@ -356,7 +348,7 @@ mod test {
 
     #[test]
     fn test_invalid_url() {
-        let mut x = KokoKeywords::new("".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
+        let mut x = KokoKeywords::new("".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
         assert_eq!(x.verify("hello", "", None), Err(KokoError::InvalidUrl));
     }
@@ -372,7 +364,7 @@ mod test {
                 .json_body(json!({ "regexes": {"keywords": [{"regex": "^sewerslide$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "}}));
         });
 
-        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
+        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
         assert_eq!(x.verify("sewerslide", "", None), Ok(true));
         keyword_mock.assert();
@@ -389,7 +381,7 @@ mod test {
                 .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "}}));
         });
 
-        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
+        let mut x = KokoKeywords::new(server.url("/keywords"), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
         assert_eq!(x.verify("suicide", "", None), Ok(true));
         keyword_mock.assert();
@@ -407,14 +399,14 @@ mod test {
 
     #[test]
     fn test_case_insensitive() {
-        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
+        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
         assert_eq!(x.verify("KMS", "", None), Ok(true));
     }
 
     #[test]
     fn test_case_preprocessing() {
-        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), SystemTime::UNIX_EPOCH));
+        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()));
 
         assert_eq!(x.verify("  kms  ", "", None), Ok(true));
     }
@@ -422,7 +414,7 @@ mod test {
     #[test]
     fn test_filters() {
         let response = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "severity":"medium", "confidence":"high"}], "preprocess": " "} }"#.to_string();
-        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(response, SystemTime::UNIX_EPOCH));
+        let mut x = KokoKeywords::new("http://localhost".to_string(), KeywordsCache::new(response, Instant::now()));
 
         assert_eq!(x.verify("kms", "category=suicide", None), Ok(true));
         assert_eq!(x.verify("kms", "category=eating", None), Ok(false));
