@@ -287,6 +287,24 @@ mod test {
     }
 
     #[test]
+    fn test_header_v2() {
+        let server = httpmock::MockServer::start();
+
+        let keyword_mock = server.mock(|when, then| {
+            when.path("/keywords").header("X-API-VERSION", "v2");
+            then.status(200);
+        });
+
+        let mut x = KokoKeywords::new(
+            server.url("/keywords"),
+            KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
+        );
+
+        x.verify("x", "").unwrap();
+        keyword_mock.assert();
+    }
+
+    #[test]
     fn test_failing_server() {
         let server = httpmock::MockServer::start();
 
