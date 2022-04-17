@@ -91,7 +91,7 @@ impl KeywordsCache {
 
         Self {
             keywords: default_response.regexes,
-            expires_at: expires_at,
+            expires_at,
         }
     }
 }
@@ -106,7 +106,7 @@ impl KokoKeywords {
         let mut keywords = HashMap::new();
         keywords.insert("latest".to_string(), default);
         Self {
-            keywords: keywords,
+            keywords,
             url,
         }
     }
@@ -117,7 +117,7 @@ impl KokoKeywords {
         filter: &str,
         version: Option<&str>,
     ) -> KokoResult<bool> {
-        let cache_key = format!("{}", version.unwrap_or("latest"));
+        let cache_key = version.unwrap_or("latest").to_string();
 
         let keyword_cache = if let Some(keyword_cache) = self.keywords.get(&cache_key) {
             if Instant::now() < keyword_cache.expires_at {
@@ -147,14 +147,14 @@ impl KokoKeywords {
             .to_lowercase();
 
         'keyword_loop: for re_keyword in &keyword_cache.keywords.keywords {
-            let filters: Vec<&str> = filter.split(":").collect();
+            let filters: Vec<&str> = filter.split(':').collect();
 
             for filter in filters {
-                if filter == "" {
+                if filter.is_empty() {
                     continue;
                 }
 
-                let filter: Vec<&str> = filter.split("=").collect();
+                let filter: Vec<&str> = filter.split('=').collect();
                 let filter_key = filter[0];
                 let filter_values = filter[1];
 
@@ -175,11 +175,11 @@ impl KokoKeywords {
             }
         }
 
-        return Ok(false);
+        Ok(false)
     }
 
     pub fn load_cache(&mut self, version: Option<&str>) -> KokoResult<()> {
-        let cache_key = format!("{}", version.unwrap_or("latest"));
+        let cache_key = version.unwrap_or("latest").to_string();
 
         eprintln!("[koko-keywords] Loading cache for '{}'", cache_key);
 
@@ -207,10 +207,8 @@ impl KokoKeywords {
 
         let expires_in = response
             .header("cache-control")
-            .map(CacheControl::from_value)
-            .flatten()
-            .map(|cc| cc.max_age)
-            .flatten()
+            .and_then(CacheControl::from_value)
+            .and_then(|cc| cc.max_age)
             .unwrap_or(CACHE_EXPIRATION_DEFAULT);
 
         let api_response: ApiResponse = match serde_json::from_reader(response.into_reader()) {
@@ -225,7 +223,7 @@ impl KokoKeywords {
             keywords: api_response.regexes,
             expires_at: Instant::now() + expires_in,
         };
-        self.keywords.insert(cache_key.to_string(), keywords_cache);
+        self.keywords.insert(cache_key, keywords_cache);
 
         Ok(())
     }
@@ -269,7 +267,7 @@ pub fn koko_keywords_match(input: &str, filter: &str, version: Option<&str>) -> 
         .lock()
         .unwrap()
         .as_mut()
-        .map_err(|e| e.clone())?
+        .map_err(|e| *e)?
         .verify(input, filter, version)
 }
 
