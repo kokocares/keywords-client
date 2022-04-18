@@ -284,6 +284,11 @@ pub extern "C" fn c_koko_keywords_error_description(error: isize) -> *const std:
 
 // TODO
 // - Pass back error once an hour (with jitter)
+// - Update build to pull latest version and overwrite keywords.json with it
+// - Update ruby
+// - Update go
+// - Update docs
+// - Ideally run tests for each client using standalone mock server
 
 #[cfg(test)]
 mod test {

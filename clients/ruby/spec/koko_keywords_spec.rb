@@ -7,6 +7,5 @@ RSpec.describe KokoKeywords do
     expect(KokoKeywords.match("sewerslide")).to                               eq(true)
     expect(KokoKeywords.match("sewerslide", filters: "category=wellness")).to eq(false)
     expect(KokoKeywords.match("it's all good")).to                            eq(false)
-    expect(KokoKeywords.match("it's all good", version: "20220206")).to       eq(false)
   end
 end
