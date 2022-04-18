@@ -5,7 +5,8 @@ ffi = FFI()
 
 def find_and_load_dylib():
   ffi.cdef("""
-  int c_koko_keywords_match(const char *input, const char *filter, const char *version);
+  int c_koko_keywords_match(const char *input, const char *filter);
+  const char* c_koko_keywords_error_description(int error);
   """)
 
   filename = "libkoko_keywords"
@@ -29,24 +30,10 @@ def find_and_load_dylib():
 
 lib = find_and_load_dylib()
 
-def match(text, filters="", version=None):
-  if version:
-    version = version.encode()
-  else:
-    version = ffi.NULL
+def match(text, filters=""):
+  match_value = lib.c_koko_keywords_match(text.encode(), filters.encode())
 
-
-  match_value = lib.c_koko_keywords_match(text.encode(), filters.encode(), version)
-
-  if match_value == -1:
-    raise RuntimeError("KOKO_KEYWORDS_AUTH must be set before importing the library")
-  elif match_value == -2:
-      raise RuntimeError("Invalid credentials. Please confirm you are using valid credentials, contact us at api.kokocares.org if you need assistance.")
-  elif match_value == -3:
-      raise RuntimeError("Unable to refresh cache. Please try again or contact us at api.kokocares.org if this issue persists.")
-  elif match_value == -4:
-      raise RuntimeError("Unable to parse response from API. Please contact us at api.kokocares.org if this issue persists.")
-  elif match_value == -5:
-      raise RuntimeError("Invalid url. Please ensure the url used is valid.")
+  if match_value < 0:
+    raise RuntimeError(str(ffi.string(lib.c_koko_keywords_error_description(match_value)), 'utf-8'))
 
   return bool(match_value)

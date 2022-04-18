@@ -1,1 +1,1 @@
-{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}], "preprocess": " "} }
+{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "intensity": "medium", "confidence":"high"}], "preprocess": " "} }

@@ -1,6 +1,7 @@
 use cache_control::CacheControl;
 use lazy_static::lazy_static;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::{env, ffi::CStr, fmt, ops, sync::Mutex};
 use ureq::{Error, ErrorKind};
@@ -56,6 +57,18 @@ pub enum KokoError {
     InvalidFilter = -6,
 }
 
+lazy_static! {
+    static ref KOKO_ERROR_DESCRIPTIONS: HashMap<isize, &'static str> = {
+        HashMap::from([
+            (KokoError::AuthOrUrlMissing as isize, "KOKO_KEYWORDS_AUTH must be set before importing the library\0"),
+            (KokoError::InvalidCredentials as isize, "Invalid credentials. Please confirm you are using valid credentials, contact us at api.kokocares.org if you need assistance.\0"),
+            (KokoError::ParseError as isize, "Unable to parse response from API. Please contact us at api.kokocares.org if this issue persists.\0)"),
+            (KokoError::InvalidUrl as isize, "Invalid url. Please ensure the url used is valid.\0"),
+            (KokoError::InvalidFilter as isize, "Invalid filter, please ensure it follows the format: category=value:another_category=value,value2\0"),
+        ])
+    };
+}
+
 #[derive(Deserialize, Debug)]
 struct Keywords {
     pub keywords: Vec<Keyword>,
@@ -66,7 +79,7 @@ struct Keywords {
 struct Keyword {
     pub regex: Regex,
     pub category: String,
-    pub severity: String,
+    pub intensity: String,
     pub confidence: String,
 }
 
@@ -74,7 +87,7 @@ impl Keyword {
     pub fn match_filter(&self, filter_key: &str, filter_values: &str) -> bool {
         match filter_key {
             "category" => filter_values.contains(&self.category),
-            "severity" => filter_values.contains(&self.severity),
+            "intensity" => filter_values.contains(&self.intensity),
             "confidence" => filter_values.contains(&self.confidence),
             _ => false,
         }
@@ -150,7 +163,7 @@ impl KokoKeywords {
     }
 
     pub fn load_cache(&mut self) -> KokoResult<()> {
-        eprintln!("[koko-keywords] Loading cache");
+        eprintln!("[koko-keywords] Loading cache ({})", self.url);
 
         let request = ureq::get(&self.url).set("X-API-VERSION", "v2");
 
@@ -163,15 +176,15 @@ impl KokoKeywords {
             }
             Err(Error::Transport(tranport_error)) => {
                 eprintln!(
-                    "[koko-keywords] Failed to load cache ({:?})",
-                    tranport_error.message()
+                    "[koko-keywords] Failed to load cache: {}",
+                    tranport_error.message().unwrap_or("Unknown")
                 );
                 return Ok(());
             }
-            Err(Error::Status(403, _)) => Err(KokoError::InvalidCredentials),
+            Err(Error::Status(401, _)) => Err(KokoError::InvalidCredentials),
             Err(Error::Status(status, response)) => {
                 eprintln!(
-                    "[koko-keywords] Failed to load cache ({}: {})",
+                    "[koko-keywords] Failed to load cache: ({}) {}",
                     status,
                     response.status_text()
                 );
@@ -188,7 +201,7 @@ impl KokoKeywords {
         let api_response: ApiResponse = match serde_json::from_reader(response.into_reader()) {
             Ok(response) => response,
             Err(err) => {
-                eprintln!("[koko-keywords] Failed to parse ({:?})", err);
+                eprintln!("[koko-keywords] Failed to parse: {}", err.to_string());
                 return Ok(());
             }
         };
@@ -264,12 +277,20 @@ pub extern "C" fn c_koko_keywords_match(
     }
 }
 
+#[no_mangle]
+pub extern "C" fn c_koko_keywords_error_description(error: isize) -> *const std::os::raw::c_char {
+    KOKO_ERROR_DESCRIPTIONS[&error].as_ptr() as *const std::os::raw::c_char
+}
+
+// TODO
+// - Pass back error once an hour (with jitter)
+
 #[cfg(test)]
 mod test {
     use super::*;
     use serde_json::json;
 
-    const DEFAULT_RESPONSE: &str = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "} }"#;
+    const DEFAULT_RESPONSE: &str = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": " "} }"#;
 
     #[test]
     fn test_koko_keywords_match_wtih_failing_server() {
@@ -361,7 +382,7 @@ mod test {
             when.path("/keywords");
             then.status(200)
                 .header("content-type", "application/json")
-                .json_body(json!({ "regexes": {"keywords": [{"regex": "^sewerslide$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "}}));
+                .json_body(json!({ "regexes": {"keywords": [{"regex": "^sewerslide$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": " "}}));
         });
 
         let mut x = KokoKeywords::new(
@@ -381,7 +402,7 @@ mod test {
             then.status(200)
                 .header("cache-control", "max-age=0")
                 .header("content-type", "application/json")
-                .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "severity":"high", "confidence":"high"}], "preprocess": " "}}));
+                .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": " "}}));
         });
 
         let mut x = KokoKeywords::new(
@@ -425,7 +446,7 @@ mod test {
 
     #[test]
     fn test_filters() {
-        let response = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "severity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "severity": "medium", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "severity":"medium", "confidence":"high"}], "preprocess": " "} }"#.to_string();
+        let response = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "intensity": "medium", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "intensity":"medium", "confidence":"high"}], "preprocess": " "} }"#.to_string();
         let mut x = KokoKeywords::new(
             "http://localhost".to_string(),
             KeywordsCache::new(response, Instant::now()),
@@ -434,12 +455,12 @@ mod test {
         assert_eq!(x.verify("kms", "category=suicide"), Ok(true));
         assert_eq!(x.verify("kms", "category=eating"), Ok(false));
         assert_eq!(
-            x.verify("kms", "category=suicide:severity=medium"),
+            x.verify("kms", "category=suicide:intensity=medium"),
             Ok(false)
         );
-        assert_eq!(x.verify("kms", "category=suicide:severity=high"), Ok(true));
+        assert_eq!(x.verify("kms", "category=suicide:intensity=high"), Ok(true));
         assert_eq!(
-            x.verify("suicidal", "category=suicide:severity=high"),
+            x.verify("suicidal", "category=suicide:intensity=high"),
             Ok(false)
         );
     }
