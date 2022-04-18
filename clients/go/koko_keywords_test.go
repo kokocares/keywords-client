@@ -18,9 +18,9 @@ func TestMatching(t *testing.T) {
   for _, tt := range tests {
     testname := fmt.Sprintf("%s->%t", tt.query, tt.expected)
     t.Run(testname, func(t *testing.T) {
-      res, _ := koko_keywords.Match(tt.query, "", "")
+      res, err := koko_keywords.Match(tt.query, "")
       if res != tt.expected {
-        t.Errorf("got %t, expected %t", res, tt.expected)
+        t.Errorf("got %t, expected %t, with error: %s", res, tt.expected, err)
       }
     })
   }

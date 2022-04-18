@@ -201,7 +201,7 @@ impl KokoKeywords {
         let api_response: ApiResponse = match serde_json::from_reader(response.into_reader()) {
             Ok(response) => response,
             Err(err) => {
-                eprintln!("[koko-keywords] Failed to parse: {}", err.to_string());
+                eprintln!("[koko-keywords] Failed to parse: {}", err);
                 return Ok(());
             }
         };
