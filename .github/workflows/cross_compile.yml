@@ -18,8 +18,6 @@ jobs:
         shell: bash
         run: |
           curl -H "x-api-version: v2" https://${{ secrets.KEYWORDS_API_CREDENTIALS }}@api.kokocares.org/keywords > src/keywords.json
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3      
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -49,8 +47,6 @@ jobs:
         shell: bash
         run: |
           curl -H "x-api-version: v2" https://${{ secrets.KEYWORDS_API_CREDENTIALS }}@api.kokocares.org/keywords > src/keywords.json
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3      
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
