@@ -150,6 +150,7 @@ impl KokoKeywords {
                     CacheError::FatalErr(err) => return Err(err),
                     CacheError::RetryableErr(err) => {
                         self.keywords.expires_at = Instant::now() + CACHE_EXPIRATION_DEFAULT;
+                        eprintln!("[koko-keywords] Retry will happen in {} hour(s)", CACHE_EXPIRATION_DEFAULT.as_secs() / 3600);
                         return Err(err)
                     }
                 }

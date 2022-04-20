@@ -72,7 +72,7 @@ keyword. The function returns a tuple of type `bool, error`. Error will be `nil`
 and the boolean value will represent whether the query matched a keyword or not.
 
 ```go
-matched, match_err := koko_keywords.Match(tt.query, "", "")
+matched, match_err := koko_keywords.Match(tt.query, "")
 
 if match_err != nil {
   // Handle error, recommend to log and panic
