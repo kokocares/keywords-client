@@ -113,7 +113,6 @@ type CacheResult<T> = Result<T, CacheError<KokoError>>;
 struct KeywordsCache {
     pub expires_at: Instant,
     pub keywords: Keywords,
-    pub next_error_at: Instant
 }
 
 impl KeywordsCache {
@@ -124,7 +123,6 @@ impl KeywordsCache {
         Self {
             keywords: default_response.regexes,
             expires_at,
-            next_error_at: Instant::now()
         }
     }
 }
@@ -147,18 +145,12 @@ impl KokoKeywords {
             &self.keywords
         } else {
             match self.load_cache() {
-                Ok(_) => {
-                    self.keywords.next_error_at = self.keywords.expires_at
-                },
+                Ok(_) => (),
                 Err(err) => match err {
                     CacheError::FatalErr(err) => return Err(err),
                     CacheError::RetryableErr(err) => {
-                        if Instant::now() >= self.keywords.next_error_at {
-                            self.keywords.next_error_at = Instant::now() + CACHE_EXPIRATION_DEFAULT;
-                            return Err(err)
-                        } else {
-                            eprintln!("[koko-keywords] Ignoring error, using existing cache");
-                        }
+                        self.keywords.expires_at = Instant::now() + CACHE_EXPIRATION_DEFAULT;
+                        return Err(err)
                     }
                 }
             };
@@ -307,12 +299,6 @@ pub extern "C" fn c_koko_keywords_error_description(error: isize) -> *const std:
     KOKO_ERROR_DESCRIPTIONS[&error].as_ptr() as *const std::os::raw::c_char
 }
 
-// TODO
-// - Update build to pull latest version and overwrite keywords.json with it
-// - Update docs at developers.kokocares.org
-// - Release 0.2.0 for all clients and tag
-// - Ideally run tests for each client using standalone mock server
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -338,7 +324,7 @@ mod test {
         keyword_mock.assert();
 
         assert_eq!(koko_keywords_match("a4a", ""), Ok(true));
-        keyword_mock.assert_hits(2);
+        keyword_mock.assert_hits(1);
     }
 
     #[test]
@@ -382,7 +368,7 @@ mod test {
 
         assert_eq!(x.verify("hello", ""), Ok(false));
         assert_eq!(x.verify("kms", ""), Ok(true));
-        keyword_mock.assert_hits(3);
+        keyword_mock.assert_hits(1);
     }
 
     #[test]
@@ -432,7 +418,7 @@ mod test {
         );
 
         assert_eq!(x.verify("kms", ""), Ok(true));
-        keyword_mock.assert_hits(2);
+        keyword_mock.assert_hits(1);
     }
 
     #[test]
@@ -494,7 +480,7 @@ mod test {
 
         assert_eq!(x.verify("suicide", ""), Err(KokoError::CacheRefreshError));
         assert_eq!(x.verify("suicide", ""), Ok(true));
-        keyword_failing_mock.assert_hits(2);
+        keyword_failing_mock.assert_hits(1);
     }
 
     #[test]
