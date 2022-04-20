@@ -17,7 +17,7 @@ jobs:
       - name: Download latest keywords
         shell: bash
         run: |
-          curl -H "x-api-version: v2" -O https://${{ secrets.KEYWORDS_API_CREDENTIALS }}@api.kokocares.org/keywords > src/keywords.json
+          curl -H "x-api-version: v2" https://${{ secrets.KEYWORDS_API_CREDENTIALS }}@api.kokocares.org/keywords > src/keywords.json
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3      
       - uses: actions-rs/toolchain@v1
@@ -48,7 +48,7 @@ jobs:
       - name: Download latest keywords
         shell: bash
         run: |
-          curl -H "x-api-version: v2" -O https://${{ secrets.KEYWORDS_API_CREDENTIALS }}@api.kokocares.org/keywords > src/keywords.json
+          curl -H "x-api-version: v2" https://${{ secrets.KEYWORDS_API_CREDENTIALS }}@api.kokocares.org/keywords > src/keywords.json
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3      
       - uses: actions-rs/toolchain@v1
