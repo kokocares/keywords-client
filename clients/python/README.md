@@ -32,7 +32,7 @@ keyword
 koko_keywords.match("sewerslide")
 ```
 
-There are two optional params, `filter` and `version`. 
+There is one optional param, `filter`. 
 
 ### Filter
 Filter the keyword based on the taxonomy using a colon delimited list of “dimension=value” filters. Omitting a dimension does not filter by that dimension e.g.
@@ -42,15 +42,6 @@ koko_keywords.match("sewerslide", "category=eating,parenting:confidence=1,2")
 ```
 
 This matches "sewerslide" against eating eating and parenting, with a confidence of 1 and 2 and any intensity (as intensity was omitted).
-
-### Version
-Use this to pin to a specific version of the regex otherwise the endpoint returns the latest.  e.g.
-
-```py
-koko_keywords.match("sewerslide", version="20220206")
-```
-
-We do not recommend setting this as we frequently update keywords for better matching performance. 
 
 ## Performance
 The underlying library is written in Rust and cross-compiled to the four major CPU targets. Regexes are cached based on the cache expiration headers (currently set to an hour). This ensures very low latency and overhead (< 1μs/req).
