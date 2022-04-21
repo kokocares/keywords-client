@@ -18,13 +18,13 @@ uname -a
 
 Download the correct library for your platform:
 - [OSX,
-  x86_64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_x86_64.dylib)
+  x86_64](https://github.com/kokocares/keywords-client/releases/download/v0.2.0/libkoko_keywords_x86_64.dylib)
 - [OSX,
-  ARM64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_arm64.dylib)
+  ARM64](https://github.com/kokocares/keywords-client/releases/download/v0.2.0/libkoko_keywords_arm64.dylib)
 - [Linux,
-  x86_64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_x86_64.so)
+  x86_64](https://github.com/kokocares/keywords-client/releases/download/v0.2.0/libkoko_keywords_x86_64.dylib)
 - [Linux,
-  ARM64](https://github.com/kokocares/keywords-client/raw/main/clients/clib/libkoko_keywords_arm64.so)
+  ARM64](https://github.com/kokocares/keywords-client/releases/download/v0.2.0/libkoko_keywords_arm64.dylib)
 
 Move the file to your shared library directory and rename the library removing
 the os/architecture label and make sure the file has execution prviledges:
