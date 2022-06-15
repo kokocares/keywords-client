@@ -3,6 +3,7 @@
 namespace Koko;
 
 use FFI;
+use Exception;
 
 final class Keywords {
     private static $ffi = null;
