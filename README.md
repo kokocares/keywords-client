@@ -7,6 +7,7 @@ A multi platform, native client with bindings (soon) to all major languages for 
 - [Python](clients/python)
 - [Ruby](clients/ruby)
 - [Go](clients/go)
+- [PHP](https://github.com/kokocares/keywords-client-php)
 
 ## License
 
