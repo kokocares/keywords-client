@@ -61,7 +61,6 @@ export KOKO_KEYWORDS_AUTH=username:password
 
 Import the module
 
-```
 ```php
 include 'vendor/autoload.php';
 
@@ -78,7 +77,7 @@ keyword. The function returns a `bool` indicating whether there was a match or
 not. The function will raise an exception if there is an issue.
 
 ```php
-if ($koko_keywords.match("some value", "") {
+if ($koko_keywords->match("some value", "") {
   // Code if there is a match
 }
 
@@ -91,7 +90,7 @@ string if you are not using it.
 Filter the keyword based on the taxonomy using a colon delimited list of “dimension=value” filters. Omitting a dimension does not filter by that dimension e.g.
 
 ```php
-$koko_keywords.match("sewerslide", "category=eating,parenting:confidence=1,2")
+$koko_keywords->match("sewerslide", "category=eating,parenting:confidence=1,2")
 ```
 
 This matches "sewerslide" against eating eating and parenting, with a confidence of 1 and 2 and any intensity (as intensity was omitted).
