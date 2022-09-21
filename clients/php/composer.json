@@ -1,0 +1,14 @@
+{
+  "name": "koko/koko-keywords",
+  "description": "A PHP client for the Koko Keywords API",
+  "require": {
+    "php": ">= 7.4",
+    "ext-FFI": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Koko\\": "Koko/"
+    }
+  },
+  "license": "MIT"
+}
