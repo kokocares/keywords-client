@@ -48,7 +48,7 @@ impl<'de> serde::Deserialize<'de> for Regex {
 
 type KokoResult<T> = Result<T, KokoError>;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KokoError {
     AuthOrUrlMissing = -1,
     InvalidCredentials = -2,
@@ -162,7 +162,7 @@ impl KokoKeywords {
         let keyword = keyword_cache
             .keywords
             .preprocess
-            .replace_all(keyword, "")
+            .replace_all(keyword, " ")
             .to_lowercase();
 
         let filters = filter
@@ -186,7 +186,7 @@ impl KokoKeywords {
     pub fn load_cache(&mut self) -> CacheResult<()> {
         eprintln!("[koko-keywords] Loading cache ({})", self.url);
 
-        let request = ureq::get(&self.url).set("X-API-VERSION", "v2");
+        let request = ureq::get(&self.url).set("X-API-VERSION", "v3");
 
         let response = match request.call() {
             Ok(response) => Ok(response),
@@ -305,7 +305,7 @@ mod test {
     use super::*;
     use serde_json::json;
 
-    const DEFAULT_RESPONSE: &str = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": " "} }"#;
+    const DEFAULT_RESPONSE: &str = r#"{ "regexes": {"keywords": [{"regex": "^ *kms *$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": "\\W"} }"#;
 
     #[test]
     fn test_koko_keywords_match_wtih_failing_server() {
@@ -329,11 +329,11 @@ mod test {
     }
 
     #[test]
-    fn test_header_v2() {
+    fn test_header_v3() {
         let server = httpmock::MockServer::start();
 
         let keyword_mock = server.mock(|when, then| {
-            when.path("/keywords").header("X-API-VERSION", "v2");
+            when.path("/keywords").header("X-API-VERSION", "v3");
             then.status(200)
                 .header("content-type", "application/json")
                 .body(DEFAULT_RESPONSE);
@@ -461,7 +461,7 @@ mod test {
             then.status(200)
                 .header("cache-control", "max-age=0")
                 .header("content-type", "application/json")
-                .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": " "}}));
+                .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": "@"}}));
         });
 
         let mut x = KokoKeywords::new(
@@ -519,7 +519,7 @@ mod test {
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        assert_eq!(x.verify("  kms  ", ""), Ok(true));
+        assert_eq!(x.verify("kms.@#", ""), Ok(true));
     }
 
     #[test]

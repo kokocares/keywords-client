@@ -17,7 +17,7 @@ jobs:
       - name: Download latest keywords
         shell: bash
         run: |
-          curl -H "x-api-version: v2" https://${{ secrets.KEYWORDS_API_CREDENTIALS }}@api.kokocares.org/keywords > src/keywords.json
+          curl -H "x-api-version: v3" https://${{ secrets.KEYWORDS_API_CREDENTIALS }}@api.kokocares.org/keywords > src/keywords.json
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
