@@ -184,7 +184,11 @@ impl KokoKeywords {
     pub fn load_cache(&mut self) -> CacheResult<()> {
         eprintln!("[koko-keywords] Loading cache ({})", self.url);
 
-        let request = ureq::get(&self.url).set("X-API-VERSION", "v3");
+        let agent = ureq::builder()
+            .user_agent("koko-keywords/0.3.1")
+            .build();
+
+        let request = agent.get(&self.url).set("X-API-VERSION", "v3");
 
         let response = match request.call() {
             Ok(response) => Ok(response),
