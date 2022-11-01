@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='koko_keywords',
-    version='0.3.0',
+    version='0.3.1',
     author='Kareem Kouddous',
     author_email='api@kokocares.org',
     description="A python client  for the Koko Keywords API. The client handles caching to ensure very low latency.",
