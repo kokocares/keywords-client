@@ -48,7 +48,7 @@ impl<'de> serde::Deserialize<'de> for Regex {
 
 type KokoResult<T> = Result<T, KokoError>;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KokoError {
     AuthOrUrlMissing = -1,
     InvalidCredentials = -2,
@@ -81,7 +81,6 @@ struct Keywords {
 struct Keyword {
     pub regex: Regex,
     pub category: String,
-    pub intensity: String,
     pub confidence: String,
 }
 
@@ -89,7 +88,6 @@ impl Keyword {
     pub fn match_filter(&self, filter_key: &str, filter_values: &str) -> bool {
         match filter_key {
             "category" => filter_values.contains(&self.category),
-            "intensity" => filter_values.contains(&self.intensity),
             "confidence" => filter_values.contains(&self.confidence),
             _ => false,
         }
@@ -162,7 +160,7 @@ impl KokoKeywords {
         let keyword = keyword_cache
             .keywords
             .preprocess
-            .replace_all(keyword, "")
+            .replace_all(keyword, " ")
             .to_lowercase();
 
         let filters = filter
@@ -186,7 +184,11 @@ impl KokoKeywords {
     pub fn load_cache(&mut self) -> CacheResult<()> {
         eprintln!("[koko-keywords] Loading cache ({})", self.url);
 
-        let request = ureq::get(&self.url).set("X-API-VERSION", "v2");
+        let agent = ureq::builder()
+            .user_agent("koko-keywords/0.3.1")
+            .build();
+
+        let request = agent.get(&self.url).set("X-API-VERSION", "v3");
 
         let response = match request.call() {
             Ok(response) => Ok(response),
@@ -305,7 +307,7 @@ mod test {
     use super::*;
     use serde_json::json;
 
-    const DEFAULT_RESPONSE: &str = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": " "} }"#;
+    const DEFAULT_RESPONSE: &str = r#"{ "regexes": {"keywords": [{"regex": "^ *kms *$", "category":"suicide", "confidence":"high"}], "preprocess": "\\W"} }"#;
 
     #[test]
     fn test_koko_keywords_match_wtih_failing_server() {
@@ -329,11 +331,11 @@ mod test {
     }
 
     #[test]
-    fn test_header_v2() {
+    fn test_header_v3() {
         let server = httpmock::MockServer::start();
 
         let keyword_mock = server.mock(|when, then| {
-            when.path("/keywords").header("X-API-VERSION", "v2");
+            when.path("/keywords").header("X-API-VERSION", "v3");
             then.status(200)
                 .header("content-type", "application/json")
                 .body(DEFAULT_RESPONSE);
@@ -441,7 +443,7 @@ mod test {
             when.path("/keywords");
             then.status(200)
                 .header("content-type", "application/json")
-                .json_body(json!({ "regexes": {"keywords": [{"regex": "^sewerslide$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": " "}}));
+                .json_body(json!({ "regexes": {"keywords": [{"regex": "^sewerslide$", "category":"suicide", "confidence":"high"}], "preprocess": " "}}));
         });
 
         let mut x = KokoKeywords::new(
@@ -461,7 +463,7 @@ mod test {
             then.status(200)
                 .header("cache-control", "max-age=0")
                 .header("content-type", "application/json")
-                .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "intensity":"high", "confidence":"high"}], "preprocess": " "}}));
+                .json_body(json!({ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "confidence":"high"}, {"regex": "^suicide$", "category":"suicide", "confidence":"high"}], "preprocess": "@"}}));
         });
 
         let mut x = KokoKeywords::new(
@@ -519,12 +521,12 @@ mod test {
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        assert_eq!(x.verify("  kms  ", ""), Ok(true));
+        assert_eq!(x.verify("kms.@#", ""), Ok(true));
     }
 
     #[test]
     fn test_filters() {
-        let response = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "intensity":"high", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "intensity": "medium", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "intensity":"medium", "confidence":"high"}], "preprocess": " "} }"#.to_string();
+        let response = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "confidence":"medium"}], "preprocess": " "} }"#.to_string();
         let server = httpmock::MockServer::start();
         let _ = server.mock(|when, then| {
             when.path("/keywords");
@@ -542,12 +544,12 @@ mod test {
         assert_eq!(x.verify("kms", "category=suicide"), Ok(true));
         assert_eq!(x.verify("kms", "category=eating"), Ok(false));
         assert_eq!(
-            x.verify("kms", "category=suicide:intensity=medium"),
+            x.verify("kms", "category=suicide:confidence=medium"),
             Ok(false)
         );
-        assert_eq!(x.verify("kms", "category=suicide:intensity=high"), Ok(true));
+        assert_eq!(x.verify("kms", "category=suicide:confidence=high"), Ok(true));
         assert_eq!(
-            x.verify("suicidal", "category=suicide:intensity=high"),
+            x.verify("suicidal", "category=suicide:confidence=high"),
             Ok(false)
         );
     }
