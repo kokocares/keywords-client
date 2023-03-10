@@ -11,16 +11,16 @@ module KokoKeywords
 
       if ENV["KOKO_LIB_PATH"]
           return ENV["KOKO_LIB_PATH"]
-      elsif uname[:sysname] == 'Darwin' and uname[:machine] == 'arm64'
+      elsif uname[:sysname] == 'Darwin' and (uname[:machine] == 'arm64' || uname[:machine] == 'aarch64')
           filename = filename + '_arm64.dylib'
       elsif uname[:sysname] == 'Darwin' and uname[:machine] == 'x86_64'
           filename = filename + '_x86_64.dylib'
       elsif uname[:sysname] == 'Linux' and uname[:machine] == 'x86_64'
           filename = filename + '_x86_64.so'
-      elsif uname[:sysname] == 'Linux' and uname[:machine] == 'arm64'
+      elsif uname[:sysname] == 'Linux' and (uname[:machine] == 'arm64' || uname[:machine] == 'aarch64')
           filename = filename + '_arm64.so'
       else
-        raise RuntimeError("Unsupported platform #{uname[:sysname]}, #{uname[:machine]} contact api@kokocares.org for support")
+        raise RuntimeError.new("Unsupported platform #{uname[:sysname]}, #{uname[:machine]} contact api@kokocares.org for support")
       end
 
       __dir__ + '/../clib/' + filename
