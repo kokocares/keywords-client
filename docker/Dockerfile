@@ -6,6 +6,4 @@ COPY Gemfile.lock /app/Gemfile.lock
 RUN bundle install
 COPY . /app
 
-ENV PORT 8080
-
 CMD ["bash", "entrypoint.sh"]
