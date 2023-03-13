@@ -7,7 +7,7 @@ maintained in between requests.
 
 ## Setup
 There's a single environment variable, `KOKO_KEYWORDS_AUTH`, that must be set to
-your `username:`password` credentials (similar to using any of the client
+your `username:password` credentials (similar to using any of the client
 libraries.
 
 ## Usage
