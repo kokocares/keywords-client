@@ -5,6 +5,10 @@ that makes it easy to use this client in a serverless deployment. Deploy this in
 a container with a minimum number of instaces of 1 to ensure that the cache is
 maintained in between requests. 
 
+## Image
+The image is built and uploaded to
+https://hub.docker.io/kokocares/koko_keyword_client
+
 ## Setup
 There's a single environment variable, `KOKO_KEYWORDS_AUTH`, that must be set to
 your `username:password` credentials (similar to using any of the client
