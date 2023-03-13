@@ -18,6 +18,35 @@ two attributes:
 * `filters`: The keyword filters
   (see https://developers.kokocares.org/docs/overview). The filters is colon delimited list of “dimension=value” filters. Omitting a dimension does not filter by that dimension.
 
-## Quickstart
+Here's a sample curl request:
+```
+curl https://keywords-client-server-n2c3m2by7q-uw.a.run.app/match -H 'content-type: application/json' -d '{ "text": "i want to kill myself" }'
+```
 
-[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run)
+The request returns a json object with a single `matched` attribute:
+
+```json
+{ 
+  "matched": true
+}
+```
+
+
+## CloudRun
+
+To deploy on CloudRun create a new service with the following settings:
+
+* Container image url: kokocares/keyword_client
+* Container port: 8080
+* CPU allocation and pricing: CPU is only allocated during request processing
+* Memory: 512 MiB
+* CPU: 1
+* Request timeout: 300
+* Maximum requests per container: 40
+* Execution environment: Default
+* Autoscaling: Min instances=1, Max instances=100
+* Environment variables: KOKO_KEYWORDS_AUTH=YOUR_CREDENTIALS
+
+You should also setup the service to not be public (the default) and ensure that
+it is on the same VPC as your serverless functions.
+
