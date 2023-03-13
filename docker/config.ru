@@ -1,0 +1,2 @@
+require './app'
+Keywords.run!
