@@ -20,8 +20,8 @@ two attributes:
 
 Here's a sample curl request:
 ```
-curl https://keywords-client-server-n2c3m2by7q-uw.a.run.app/match
-  -H 'content-type: application/json'
+curl https://keywords-client-server-n2c3m2by7q-uw.a.run.app/match \
+  -H 'content-type: application/json' \
   -d '{ "text": "i want to kill myself", "filters": "category=suicide" }'
 ```
 
