@@ -7,7 +7,7 @@ maintained in between requests.
 
 ## Image
 The image is built and uploaded to
-https://hub.docker.io/kokocares/koko_keyword_client
+https://hub.docker.com/r/kokocares/koko_keywords_client
 
 ## Setup
 There's a single environment variable, `KOKO_KEYWORDS_AUTH`, that must be set to
