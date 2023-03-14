@@ -1,6 +1,6 @@
 # Docker image for running a client in a serverless environment
 
-This folder contains a very think http client for the keywords client library
+This folder contains a very thin http client for the keywords client library
 that makes it easy to use this client in a serverless deployment. Deploy this in
 a container with a minimum number of instaces of 1 to ensure that the cache is
 maintained in between requests. 
