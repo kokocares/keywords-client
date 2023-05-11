@@ -1,6 +1,7 @@
 use cache_control::CacheControl;
 use lazy_static::lazy_static;
 use serde::Deserialize;
+use thiserror::Error;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use std::{env, ffi::CStr, fmt, ops, sync::Mutex};
@@ -48,13 +49,19 @@ impl<'de> serde::Deserialize<'de> for Regex {
 
 type KokoResult<T> = Result<T, KokoError>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Error)]
 pub enum KokoError {
+    #[error("KOKO_KEYWORDS_AUTH must be set before importing the library")]
     AuthOrUrlMissing = -1,
+    #[error("Invalid credentials. Please confirm you are using valid credentials, contact us at api@kokocares.org if you need assistance.")]
     InvalidCredentials = -2,
+    #[error("Unable to refresh cache. Please try again or contact us at api@kokocares.org if this issue persists.)")]
     CacheRefreshError = -3,
+    #[error("Unable to parse response from API. Please contact us at api@kokocares.org if this issue persists.)")]
     ParseError = -4,
+    #[error("Invalid url. Please ensure the url used is valid.")]
     InvalidUrl = -5,
+    #[error("Invalid filter, please ensure it follows the format: category=value:another_category=value,value2")]
     InvalidFilter = -6,
 }
 
