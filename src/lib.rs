@@ -1,11 +1,14 @@
 use cache_control::CacheControl;
 use lazy_static::lazy_static;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use thiserror::Error;
+use tokio::runtime::Runtime;
+use tokio::sync::Mutex;
 use std::collections::HashMap;
+use std::ffi::CStr;
 use std::time::{Duration, Instant};
-use std::{env, ffi::CStr, fmt, ops, sync::Mutex};
-use ureq::{Error, ErrorKind};
+use std::{env, fmt, ops};
 
 const URL: &str = "api.kokocares.org/keywords";
 const CACHE_EXPIRATION_DEFAULT: Duration = Duration::from_secs(3600);
@@ -145,11 +148,11 @@ impl KokoKeywords {
         }
     }
 
-    pub fn verify(&mut self, keyword: &str, filter: &str) -> KokoResult<bool> {
+    pub async fn verify(&mut self, keyword: &str, filter: &str) -> KokoResult<bool> {
         let keyword_cache = if Instant::now() < self.keywords.expires_at {
             &self.keywords
         } else {
-            match self.load_cache() {
+            match self.load_cache().await {
                 Ok(_) => (),
                 Err(err) => match err {
                     CacheError::FatalErr(err) => return Err(err),
@@ -188,59 +191,62 @@ impl KokoKeywords {
         }))
     }
 
-    pub fn load_cache(&mut self) -> CacheResult<()> {
+    pub async fn load_cache(&mut self) -> CacheResult<()> {
         eprintln!("[koko-keywords] Loading cache ({})", self.url);
 
-        let agent = ureq::builder()
+        let client = reqwest::Client::builder()
             .user_agent("koko-keywords/0.3.1")
-            .build();
+            .build()
+            .unwrap();
 
-        let request = agent.get(&self.url).set("X-API-VERSION", "v3");
+        let request = client.get(&self.url).header("X-API-VERSION", "v3");
 
-        let response = match request.call() {
+        let response = match request.send().await {
             Ok(response) => Ok(response),
-            Err(Error::Transport(tranport_error))
-                if tranport_error.kind() == ErrorKind::InvalidUrl =>
-            {
-                Err(CacheError::FatalErr(KokoError::InvalidUrl))
-            }
-            Err(Error::Transport(tranport_error)) => {
+            Err(error) => {
                 eprintln!(
                     "[koko-keywords] Failed to load cache: {}",
-                    tranport_error.message().unwrap_or("Unknown")
+                    error
                 );
-                Err(CacheError::RetryableErr(KokoError::CacheRefreshError))
-            }
-            Err(Error::Status(401, _)) => Err(CacheError::FatalErr(KokoError::InvalidCredentials)),
-            Err(Error::Status(status, response)) => {
-                eprintln!(
-                    "[koko-keywords] Failed to load cache: ({}) {}",
-                    status,
-                    response.status_text()
-                );
-                Err(CacheError::RetryableErr(KokoError::CacheRefreshError))
+                Err(CacheError::FatalErr(KokoError::InvalidUrl))
             }
         }?;
 
-        let expires_in = response
-            .header("cache-control")
-            .and_then(CacheControl::from_value)
-            .and_then(|cc| cc.max_age)
-            .unwrap_or(CACHE_EXPIRATION_DEFAULT);
-
-        let api_response: ApiResponse = match serde_json::from_reader(response.into_reader()) {
-            Ok(response) => response,
-            Err(err) => {
-                eprintln!("[koko-keywords] Failed to parse: {}", err);
-                return Err(CacheError::RetryableErr(KokoError::ParseError))
+        if !response.status().is_success() {
+            match response.status() {
+                StatusCode::UNAUTHORIZED => Err(CacheError::FatalErr(KokoError::InvalidCredentials)),
+                _ => {
+                    eprintln!(
+                        "[koko-keywords] Failed to load cache: ({}) {}",
+                        response.status(),
+                        response.status().canonical_reason().unwrap_or("Unknown")
+                    );
+                    Err(CacheError::RetryableErr(KokoError::CacheRefreshError))
+                }
             }
-        };
+        } else {
+            let expires_in = response
+                .headers()
+                .get("cache-control")
+                .and_then(|cc| CacheControl::from_value(cc.to_str().unwrap_or("")))
+                .and_then(|cc| cc.max_age)
+                .unwrap_or(CACHE_EXPIRATION_DEFAULT);
 
-        self.keywords.keywords = api_response.regexes;
-        self.keywords.expires_at = Instant::now() + expires_in;
+            let api_response: ApiResponse = match response.json().await {
+                Ok(response) => response,
+                Err(err) => {
+                    eprintln!("[koko-keywords] Failed to parse: {}", err);
+                    return Err(CacheError::RetryableErr(KokoError::ParseError))
+                }
+            };
 
-        CacheResult::Ok(())
+            self.keywords.keywords = api_response.regexes;
+            self.keywords.expires_at = Instant::now() + expires_in;
+
+            CacheResult::Ok(())
+        }
     }
+
 }
 
 lazy_static! {
@@ -267,6 +273,16 @@ pub fn get_url() -> KokoResult<String> {
     }
 }
 
+pub async fn koko_keywords_match(input: &str, filter: &str) -> KokoResult<bool> {
+    MATCHER
+        .lock()
+        .await
+        .as_mut()
+        .map_err(|e| *e)?
+        .verify(input, filter)
+        .await
+}
+
 fn str_from_c<'a>(c_str: *const std::os::raw::c_char) -> Option<&'a str> {
     if c_str.is_null() {
         None
@@ -279,15 +295,6 @@ fn str_from_c<'a>(c_str: *const std::os::raw::c_char) -> Option<&'a str> {
     }
 }
 
-pub fn koko_keywords_match(input: &str, filter: &str) -> KokoResult<bool> {
-    MATCHER
-        .lock()
-        .unwrap()
-        .as_mut()
-        .map_err(|e| *e)?
-        .verify(input, filter)
-}
-
 #[no_mangle]
 pub extern "C" fn c_koko_keywords_match(
     input: *const std::os::raw::c_char,
@@ -296,7 +303,11 @@ pub extern "C" fn c_koko_keywords_match(
     let input = str_from_c(input).expect("Input is required");
     let filter = str_from_c(filter).expect("Filter is required");
 
-    let result = koko_keywords_match(input, filter);
+    // Create a Tokio runtime
+    let rt = Runtime::new().unwrap();
+
+    // Run the async function within the runtime's context and block until it finishes
+    let result = rt.block_on(koko_keywords_match(input, filter));
     match result {
         Ok(true) => 1,
         Ok(false) => 0,
@@ -316,8 +327,8 @@ mod test {
 
     const DEFAULT_RESPONSE: &str = r#"{ "regexes": {"keywords": [{"regex": "^ *kms *$", "category":"suicide", "confidence":"high"}], "preprocess": "\\W"} }"#;
 
-    #[test]
-    fn test_koko_keywords_match_wtih_failing_server() {
+    #[tokio::test]
+    async fn test_koko_keywords_match_wtih_failing_server() {
         let server = httpmock::MockServer::start();
 
         let keyword_mock = server.mock(|when, then| {
@@ -328,17 +339,17 @@ mod test {
         env::set_var("KOKO_KEYWORDS_URL", server.url("/keywords"));
 
         assert_eq!(
-            koko_keywords_match("a4a", ""),
+            koko_keywords_match("a4a", "").await,
             Err(KokoError::CacheRefreshError)
         );
         keyword_mock.assert();
 
-        assert_eq!(koko_keywords_match("a4a", ""), Ok(true));
+        assert_eq!(koko_keywords_match("a4a", "").await, Ok(true));
         keyword_mock.assert_hits(1);
     }
 
-    #[test]
-    fn test_header_v3() {
+    #[tokio::test]
+    async fn test_header_v3() {
         let server = httpmock::MockServer::start();
 
         let keyword_mock = server.mock(|when, then| {
@@ -353,12 +364,12 @@ mod test {
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        x.verify("x", "").unwrap();
+        x.verify("x", "").await.unwrap();
         keyword_mock.assert();
     }
 
-    #[test]
-    fn test_failing_server() {
+    #[tokio::test]
+    async fn test_failing_server() {
         let server = httpmock::MockServer::start();
 
         let keyword_mock = server.mock(|when, then| {
@@ -372,17 +383,17 @@ mod test {
         );
 
         assert_eq!(
-            x.verify("kms", ""),
+            x.verify("kms", "").await,
             Err(KokoError::CacheRefreshError)
         );
 
-        assert_eq!(x.verify("hello", ""), Ok(false));
-        assert_eq!(x.verify("kms", ""), Ok(true));
+        assert_eq!(x.verify("hello", "").await, Ok(false));
+        assert_eq!(x.verify("kms", "").await, Ok(true));
         keyword_mock.assert_hits(1);
     }
 
-    #[test]
-    fn test_invalid_credentials() {
+    #[tokio::test]
+    async fn test_invalid_credentials() {
         let server = httpmock::MockServer::start();
 
         let keyword_mock = server.mock(|when, then| {
@@ -396,18 +407,18 @@ mod test {
         );
 
         assert_eq!(
-            x.verify("a4a", ""),
+            x.verify("a4a", "").await,
             Err(KokoError::InvalidCredentials)
         );
         assert_eq!(
-            x.verify("hello", ""),
+            x.verify("hello", "").await,
             Err(KokoError::InvalidCredentials)
         );
         keyword_mock.assert_hits(2);
     }
 
-    #[test]
-    fn test_invalid_response() {
+    #[tokio::test]
+    async fn test_invalid_response() {
         let server = httpmock::MockServer::start();
 
         let keyword_mock = server.mock(|when, then| {
@@ -423,27 +434,27 @@ mod test {
         );
 
         assert_eq!(
-            x.verify("a4a", ""),
+            x.verify("a4a", "").await,
             Err(KokoError::ParseError)
         );
 
-        assert_eq!(x.verify("kms", ""), Ok(true));
+        assert_eq!(x.verify("kms", "").await, Ok(true));
         keyword_mock.assert_hits(1);
     }
 
-    #[test]
-    fn test_invalid_url() {
+    #[tokio::test]
+    async fn test_invalid_url() {
         let mut x = KokoKeywords::new(
             "".to_string(),
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        assert_eq!(x.verify("hello", ""), Err(KokoError::InvalidUrl));
-        assert_eq!(x.verify("hello", ""), Err(KokoError::InvalidUrl));
+        assert_eq!(x.verify("hello", "").await, Err(KokoError::InvalidUrl));
+        assert_eq!(x.verify("hello", "").await, Err(KokoError::InvalidUrl));
     }
 
-    #[test]
-    fn test_valid_response() {
+    #[tokio::test]
+    async fn test_valid_response() {
         let server = httpmock::MockServer::start();
 
         let keyword_mock = server.mock(|when, then| {
@@ -458,12 +469,12 @@ mod test {
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        assert_eq!(x.verify("sewerslide", ""), Ok(true));
+        assert_eq!(x.verify("sewerslide", "").await, Ok(true));
         keyword_mock.assert();
     }
 
-    #[test]
-    fn test_expired_cache_with_failing_request() {
+    #[tokio::test]
+    async fn test_expired_cache_with_failing_request() {
         let server = httpmock::MockServer::start();
         let keyword_mock = server.mock(|when, then| {
             when.path("/keywords");
@@ -478,7 +489,7 @@ mod test {
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        assert_eq!(x.verify("suicide", ""), Ok(true));
+        assert_eq!(x.verify("suicide", "").await, Ok(true));
         keyword_mock.assert();
 
         let server = httpmock::MockServer::start();
@@ -488,13 +499,13 @@ mod test {
         });
         x.url = server.url("/keywords");
 
-        assert_eq!(x.verify("suicide", ""), Err(KokoError::CacheRefreshError));
-        assert_eq!(x.verify("suicide", ""), Ok(true));
+        assert_eq!(x.verify("suicide", "").await, Err(KokoError::CacheRefreshError));
+        assert_eq!(x.verify("suicide", "").await, Ok(true));
         keyword_failing_mock.assert_hits(1);
     }
 
-    #[test]
-    fn test_case_insensitive() {
+    #[tokio::test]
+    async fn test_case_insensitive() {
         let server = httpmock::MockServer::start();
         let _ = server.mock(|when, then| {
             when.path("/keywords");
@@ -509,11 +520,11 @@ mod test {
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        assert_eq!(x.verify("KMS", ""), Ok(true));
+        assert_eq!(x.verify("KMS", "").await, Ok(true));
     }
 
-    #[test]
-    fn test_preprocessing() {
+    #[tokio::test]
+    async fn test_preprocessing() {
         let server = httpmock::MockServer::start();
         let _ = server.mock(|when, then| {
             when.path("/keywords");
@@ -528,11 +539,11 @@ mod test {
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        assert_eq!(x.verify("kms.@#", ""), Ok(true));
+        assert_eq!(x.verify("kms.@#", "").await, Ok(true));
     }
 
-    #[test]
-    fn test_filters() {
+    #[tokio::test]
+    async fn test_filters() {
         let response = r#"{ "regexes": {"keywords": [{"regex": "^kms$", "category":"suicide", "confidence":"high"}, {"regex":"^a4a$", "category":"eating", "confidence":"high"}, {"regex": "^suicidal$", "category":"suicide", "confidence":"medium"}], "preprocess": " "} }"#.to_string();
         let server = httpmock::MockServer::start();
         let _ = server.mock(|when, then| {
@@ -548,15 +559,15 @@ mod test {
             KeywordsCache::new(DEFAULT_RESPONSE.to_string(), Instant::now()),
         );
 
-        assert_eq!(x.verify("kms", "category=suicide"), Ok(true));
-        assert_eq!(x.verify("kms", "category=eating"), Ok(false));
+        assert_eq!(x.verify("kms", "category=suicide").await, Ok(true));
+        assert_eq!(x.verify("kms", "category=eating").await, Ok(false));
         assert_eq!(
-            x.verify("kms", "category=suicide:confidence=medium"),
+            x.verify("kms", "category=suicide:confidence=medium").await,
             Ok(false)
         );
-        assert_eq!(x.verify("kms", "category=suicide:confidence=high"), Ok(true));
+        assert_eq!(x.verify("kms", "category=suicide:confidence=high").await, Ok(true));
         assert_eq!(
-            x.verify("suicidal", "category=suicide:confidence=high"),
+            x.verify("suicidal", "category=suicide:confidence=high").await,
             Ok(false)
         );
     }
