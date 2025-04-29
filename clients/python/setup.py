@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='koko_keywords',
-    version='0.3.1',
+    version='0.3.2',
     author='Kareem Kouddous',
     author_email='api@kokocares.org',
     description="A python client  for the Koko Keywords API. The client handles caching to ensure very low latency.",
@@ -10,6 +10,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/kokocares/keywords-client/python/client",
     license='MIT',
+    license_files = ('LICENSE',),
     classifiers=[
       'Development Status :: 4 - Beta',
       'Intended Audience :: Developers',
@@ -30,7 +31,7 @@ setup(
     packages=find_packages(),
     include_package_data = True,
     install_requires=[
-        'cffi==1.15.0'
+        'cffi>=1.15.0'
     ],
     python_requires='>=3'
 )
