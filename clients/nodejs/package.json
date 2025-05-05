@@ -1,0 +1,40 @@
+{
+	"name": "@kokocares/keywords-client",
+	"version": "0.1.0",
+	"description": "A JavaScript client for the Koko Keywords API",
+	"license": "MIT",
+	"repository": "kokocares/keywords-client",
+	"author": {
+		"name": "Kareem Kouddous",
+		"email": "info@kokocares.org",
+		"url": "https://kokocares.org"
+	},
+	"type": "module",
+	"exports": "./index.js",
+	"engines": {
+		"node": ">=16.0.0"
+	},
+	"scripts": {
+		"test": "eslint . && ava && tsd"
+	},
+	"files": [
+		"clib",
+		"index.js",
+		"index.d.ts"
+	],
+	"keywords": [
+		"kokocares",
+		"keywords"
+	],
+	"dependencies": {
+		"ffi-napi": "^4.0.3"
+	},
+	"devDependencies": {
+		"ava": "^4.1.0",
+		"eslint-config-prettier": "^8.5.0",
+		"eslint-config-xo": "^0.40.0",
+		"eslint-plugin-import": "^2.25.4",
+		"eslint-plugin-prettier": "^4.0.0",
+		"tsd": "^0.19.1"
+	}
+}
